@@ -1,68 +1,55 @@
-// Core & Auth (Phase 3)
+// Core & Auth (Remote Supabase)
 // - First-run Admin Setup (no default admin)
-// - Sessions, LocalStorage helpers
+// - Sessions in localStorage, data in Supabase
 // - Theme & Language toggles
-// - Auth → App shell routing + i18n-safe label updates
+// - Async rendering with RemoteStore
 
 (function(){
-  // ===== KEYS =====
-  const USERS_KEY   = 'divine_users_v1';
   const SESSION_KEY = 'divine_session_v1';
   const THEME_KEY   = 'divine_theme';
   const LANG_KEY    = 'divine_lang';
 
-  // ===== STATE =====
   let session = null; // {userId, username, role}
 
-  // ===== HELPERS =====
   const $ = (sel, root=document)=> root.querySelector(sel);
   const rid = ()=> Math.random().toString(36).slice(2,10);
 
-  function loadUsers(){ try{ const raw = localStorage.getItem(USERS_KEY); return raw ? JSON.parse(raw) : []; }catch(e){ return []; } }
-  function saveUsers(arr){ localStorage.setItem(USERS_KEY, JSON.stringify(arr)); }
-
-  function getSession(){ try{ return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); }catch(e){ return null; } }
+  // session-only (local)
+  function getSession(){ try{ return JSON.parse(localStorage.getItem(SESSION_KEY)||'null'); }catch{ return null; } }
   function setSession(s){ localStorage.setItem(SESSION_KEY, JSON.stringify(s)); }
   function clearSession(){ localStorage.removeItem(SESSION_KEY); }
 
-  function getTheme(){ return localStorage.getItem(THEME_KEY) || 'dark'; }
-  function setTheme(v){
-    localStorage.setItem(THEME_KEY, v);
-    document.documentElement.setAttribute('data-theme', v === 'light' ? 'light' : 'dark');
-  }
-
-  function getLang(){ return localStorage.getItem(LANG_KEY) || 'en'; }
+  // theme/lang (local)
+  function getTheme(){ return localStorage.getItem(THEME_KEY)||'dark'; }
+  function setTheme(v){ localStorage.setItem(THEME_KEY,v); document.documentElement.setAttribute('data-theme', v==='light'?'light':'dark'); }
+  function getLang(){ return localStorage.getItem(LANG_KEY)||'en'; }
   function setLang(v){
-    localStorage.setItem(LANG_KEY, v);
+    localStorage.setItem(LANG_KEY,v);
     if ($('#langBtn')) $('#langBtn').textContent = v.toUpperCase();
     I18N.setLang(v);
     syncStaticText();
-    // If we are on the auth screen, re-render it so labels refresh
-    if (!$('#appRoot')?.classList.contains('hidden')) return;
-    renderAuth();
+    if ($('#authRoot') && !$('#appRoot')?.classList.contains('hidden')) return;
+    renderAuth(); // refresh auth labels if visible
   }
 
-  function safeText(el, key){
-    if (!el) return;
-    const val = I18N.t(key);
-    if (typeof val === 'string') el.textContent = val;
-  }
-
+  function safeText(el, key){ if (el){ const val = I18N.t(key); if (typeof val==='string') el.textContent = val; } }
   function syncStaticText(){
     safeText($('#title'), 'app_title');
     safeText($('#logoutBtn'), 'logout');
     safeText($('#appHint'), 'app_hint');
     safeText($('#goStore'), 'nav_store');
     safeText($('#goSheet'), 'nav_sheet');
+    safeText($('#goAdmin'), 'nav_admin');
   }
 
-  // ===== AUTH RENDERING =====
-  function renderAuth(){
-    const root = $('#authRoot');
+  // ===== AUTH RENDERING (async) =====
+  async function renderAuth(){
+    const root = $('#authRoot'); if(!root) return;
     root.innerHTML = '';
-    const users = loadUsers();
 
-    if (!users || users.length === 0){
+    const users = await RemoteStore.loadUsers();
+
+    if(!users || users.length===0){
       // First-run Admin Setup
       const wrap = document.createElement('div');
       wrap.innerHTML = `
@@ -75,13 +62,13 @@
         </div>
       `;
       root.appendChild(wrap);
-
-      $('#setupBtn', wrap).addEventListener('click', ()=>{
-        const u = $('#S_user', wrap).value.trim();
-        const p = $('#S_pass', wrap).value.trim();
-        if (!u || !p){ alert(I18N.t('need_credentials')); return; }
-        saveUsers([{ id: rid(), username: u, password: p, role: 'admin' }]);
-        renderAuth();
+      $('#setupBtn',wrap).addEventListener('click', async ()=>{
+        const u = $('#S_user',wrap).value.trim();
+        const p = $('#S_pass',wrap).value.trim();
+        if(!u||!p){ alert(I18N.t('need_credentials')); return; }
+        const next = [{ id: rid(), username:u, password:p, role:'admin' }];
+        await RemoteStore.saveUsers(next);
+        await renderAuth();
       });
       return;
     }
@@ -99,32 +86,32 @@
     `;
     root.appendChild(wrap);
 
-    $('#loginBtn', wrap).addEventListener('click', ()=>{
-      const u = $('#L_user', wrap).value.trim();
-      const p = $('#L_pass', wrap).value.trim();
-      const users2 = loadUsers();
-      const found = users2.find(x => x.username === u && x.password === p);
-      if (!found){ $('#loginMsg', wrap).textContent = I18N.t('invalid'); return; }
+    $('#loginBtn',wrap).addEventListener('click', async ()=>{
+      const u = $('#L_user',wrap).value.trim();
+      const p = $('#L_pass',wrap).value.trim();
+      const users2 = await RemoteStore.loadUsers();
+      const found = users2.find(x=>x.username===u && x.password===p);
+      if(!found){ $('#loginMsg',wrap).textContent = I18N.t('invalid'); return; }
       session = { userId: found.id, username: found.username, role: found.role };
       setSession(session);
-      renderApp();
+      await renderApp();
     });
   }
 
   // ===== APP SHELL =====
-  function renderApp(){
+  async function renderApp(){
     $('#authRoot')?.classList.add('hidden');
-    const app = $('#appRoot');
-    app.classList.remove('hidden');
+    const app = $('#appRoot'); app.classList.remove('hidden');
 
     $('#userBadge').textContent = `${session.username} • ${session.role}`;
     $('#logoutBtn').classList.remove('hidden');
 
-    // Welcome text
-    const w = I18N.t('welcome', { name: session.username });
+    const w = I18N.t('welcome', {name: session.username});
     if (typeof w === 'string') $('#welcome').textContent = w;
 
-    // Ensure nav labels reflect current language
+    // Show Admin nav if admin
+    if(session.role==='admin') $('#goAdmin')?.classList.remove('hidden');
+
     syncStaticText();
   }
 
@@ -138,26 +125,21 @@
   }
 
   // ===== INIT =====
-  // theme & lang from storage
   setTheme(getTheme());
   setLang(getLang());
   syncStaticText();
 
-  // header buttons
-  $('#themeBtn')?.addEventListener('click', ()=> setTheme(getTheme() === 'dark' ? 'light' : 'dark'));
-  $('#langBtn')?.addEventListener('click', ()=> setLang(getLang() === 'en' ? 'el' : 'en'));
+  $('#themeBtn')?.addEventListener('click', ()=> setTheme(getTheme()==='dark'?'light':'dark'));
+  $('#langBtn')?.addEventListener('click', ()=> setLang(getLang()==='en'?'el':'en'));
   $('#logoutBtn')?.addEventListener('click', logout);
 
-  // session boot
   const sess = getSession();
-  if (sess){ session = sess; renderApp(); }
-  else { renderAuth(); }
+  if(sess){ session = sess; renderApp(); } else { renderAuth(); }
 
-  // expose minimal API for other modules
   window.Core = {
     getLang, setLang, getTheme, setTheme,
-    getSession: ()=> session,
+    getSession: ()=>session,
     logout,
-    users: { load: loadUsers, save: saveUsers }
+    // (Remote users are only through RemoteStore)
   };
 })();
