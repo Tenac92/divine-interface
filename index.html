@@ -42,26 +42,29 @@
       <div class="row" style="margin:8px 0 12px">
         <button class="btn" id="goStore">Store</button>
         <button class="btn" id="goSheet">Character Sheet</button>
-         <button class="btn hidden" id="goAdmin">Admin</button>
+        <button class="btn hidden" id="goAdmin">Admin</button>
       </div>
       <div id="viewRoot"></div>
     </div>
   </div>
 
-  <!-- Scripts order matters: i18n → data → core → features -->
+  <!-- Supabase client + your project config -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-<script>
-  window.SUPABASE = {
-    url: https://mwfahegdlmjnjuqdygmq.supabase.co,
-    anon: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13ZmFoZWdkbG1qbmp1cWR5Z21xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA0MjE5MTEsImV4cCI6MjA3NTk5NzkxMX0.57kVafRwL7e6BKv6cfP1VqJNMWLSqOQQNlVuiougu9E
-  };
-</script>
+  <script defer>
+    // SAFE to expose: anon key + URL (use strict RLS policies)
+    window.SUPABASE = {
+      url: 'https://mwfahegdlmjnjuqdygmq.supabase.co',
+      anon: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13ZmFoZWdkbG1qbmp1cWR5Z21xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA0MjE5MTEsImV4cCI6MjA3NTk5NzkxMX0.57kVafRwL7e6BKv6cfP1VqJNMWLSqOQQNlVuiougu9E'
+    };
+  </script>
   <script src="js/storage.supabase.js" defer></script>
-<script src="js/i18n.js" defer></script>
-<script src="data/packs.js" defer></script>
-<script src="js/core.js" defer></script>
-<script src="js/store.js" defer></script>
-<script src="js/sheet.js" defer></script>
-<script src="js/admin.js" defer></script>
+
+  <!-- Scripts order matters: i18n → data → core → features -->
+  <script src="js/i18n.js" defer></script>
+  <script src="data/packs.js" defer></script>
+  <script src="js/core.js" defer></script>
+  <script src="js/store.js" defer></script>
+  <script src="js/sheet.js" defer></script>
+  <script src="js/admin.js" defer></script>
 </body>
 </html>
