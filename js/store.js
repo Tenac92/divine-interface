@@ -1,28 +1,9 @@
-// Divine Store (Phase 2)
-// Minimal, modular store view wired to Core + PACKS
+// Divine Store (Remote Supabase)
+// Uses RemoteStore for profiles; per-user by session.username
 
 (function(){
-  const PROFILES_KEY = 'divine_profiles_v1';
+  const $ = (s,r=document)=>r.querySelector(s);
 
-  // ===== Utilities
-  const $ = (sel,root=document)=>root.querySelector(sel);
-  const rid = ()=> Math.random().toString(36).slice(2,10);
-
-  function loadProfiles(){ try{ const raw = localStorage.getItem(PROFILES_KEY); return raw? JSON.parse(raw): {}; }catch(e){ return {}; } }
-  function saveProfiles(v){ localStorage.setItem(PROFILES_KEY, JSON.stringify(v)); }
-
-  function ensureProfile(username){
-    const profiles = loadProfiles();
-    if(!profiles[username]){
-      profiles[username] = { id: rid(), name: username, god:'Tyr/Bahamut', level:1, fp:10, owned:[], lock:false };
-      saveProfiles(profiles);
-    }
-    return profiles[username];
-  }
-
-  function saveProfile(username, data){ const all = loadProfiles(); all[username] = data; saveProfiles(all); }
-
-  // ===== Ranks
   const RANKS = [
     {min:-999, name:'Forsaken'},
     {min:-4,   name:'Distant'},
@@ -33,13 +14,23 @@
   ];
   const rankFromFP = (fp)=> [...RANKS].reverse().find(r=>fp>=r.min).name;
 
-  // ===== Rendering
-  function mount(){
-    const sess = Core.getSession(); if(!sess) return;
-    const profile = ensureProfile(sess.username);
+  function defaultProfile(username){
+    return { id: Math.random().toString(36).slice(2,10), name: username, god:'Tyr/Bahamut', level:1, fp:10, owned:[], lock:false };
+  }
 
-    const root = $('#viewRoot');
+  function catalogForGod(god){
+    const pack = (window.PACKS.GOD_PACKS[god]||[]).map(x=>({...x, pack:true}));
+    return [...window.PACKS.BASE_ITEMS, ...pack];
+  }
+
+  async function mount(){
+    const sess = Core.getSession(); if(!sess) return;
+    let profile = await RemoteStore.loadProfile(sess.username);
+    if(!profile){ profile = defaultProfile(sess.username); await RemoteStore.saveProfile(sess.username, profile); }
+
+    const root = document.getElementById('viewRoot');
     root.innerHTML = '';
+
     const wrap = document.createElement('div');
     wrap.innerHTML = `
       <div class="row" style="justify-content:space-between;align-items:center">
@@ -52,7 +43,7 @@
       </div>
 
       <div class="row" style="margin:8px 0">
-        <div class="field"><label>${I18N.t('patron')||'Patron'}</label>
+        <div class="field"><label>${I18N.t('patron')||'God / Patron'}</label>
           <select id="godSel">
             <option>Tyr/Bahamut</option>
             <option>Raven Queen</option>
@@ -69,24 +60,24 @@
     `;
     root.appendChild(wrap);
 
-    // bind selectors
     const fpEl = $('#fp', wrap);
     const rankEl = $('#rank', wrap);
     const godSel = $('#godSel', wrap);
     const q = $('#q', wrap);
-
     godSel.value = profile.god;
 
-    function catalog(){
-      const pack = (window.PACKS.GOD_PACKS[profile.god]||[]).map(x=>({...x, pack:true}));
-      return [...window.PACKS.BASE_ITEMS, ...pack];
+    function filteredItems(){
+      const list = catalogForGod(profile.god);
+      const term = (q.value||'').toLowerCase();
+      if(!term) return list;
+      return list.filter(it=> it.name.toLowerCase().includes(term) || it.desc.toLowerCase().includes(term));
     }
 
-    function renderItems(){
-      const list = catalog().filter(it=> !q.value || it.name.toLowerCase().includes(q.value.toLowerCase()) || it.desc.toLowerCase().includes(q.value.toLowerCase()));
+    async function renderItems(){
       const holder = $('#items', wrap); holder.innerHTML='';
-      list.forEach(it=>{
-        const owned = profile.owned.some(o=>o.id===it.id);
+      const list = filteredItems();
+      for(const it of list){
+        const owned = (profile.owned||[]).some(o=>o.id===it.id);
         const card = document.createElement('div'); card.className='panel'; card.style.marginBottom='8px';
         card.innerHTML = `
           <div class="row" style="justify-content:space-between">
@@ -97,35 +88,34 @@
             <div class="row">
               <div class="btn">Cost: ${it.cost} FP</div>
               <button class="btn" ${owned||profile.fp<it.cost||profile.lock?'disabled':''} data-act="buy">${owned? 'Owned' : 'Purchase'}</button>
-              ${ (Core.getSession().role==='admin' && owned) ? '<button class="btn" data-act="refund">Refund (50%)</button>':''}
+              ${(sess.role==='admin' && owned) ? '<button class="btn" data-act="refund">Refund (50%)</button>':''}
             </div>
           </div>
         `;
-        card.querySelector('[data-act="buy"]')?.addEventListener('click', ()=>{
-          if(profile.lock) return;
-          if(profile.fp<it.cost) return;
-          if(profile.owned.some(o=>o.id===it.id)) return;
-          profile.fp -= it.cost; profile.owned.push(it);
-          saveProfile(sess.username, profile);
+        card.querySelector('[data-act="buy"]')?.addEventListener('click', async ()=>{
+          if(profile.lock || profile.fp<it.cost) return;
+          if((profile.owned||[]).some(o=>o.id===it.id)) return;
+          profile.fp -= it.cost; (profile.owned||=[]).push(it);
+          await RemoteStore.saveProfile(sess.username, profile);
           fpEl.textContent = profile.fp; rankEl.textContent = rankFromFP(profile.fp);
-          renderItems(); renderOwned();
+          await renderItems(); await renderOwned();
         });
-        card.querySelector('[data-act="refund"]')?.addEventListener('click', ()=>{
-          if(Core.getSession().role!=='admin') return;
-          const ix = profile.owned.findIndex(o=>o.id===it.id); if(ix<0) return;
+        card.querySelector('[data-act="refund"]')?.addEventListener('click', async ()=>{
+          if(sess.role!=='admin') return;
+          const ix = (profile.owned||[]).findIndex(o=>o.id===it.id); if(ix<0) return;
           profile.owned.splice(ix,1);
           profile.fp += Math.floor(it.cost*0.5);
-          saveProfile(sess.username, profile);
+          await RemoteStore.saveProfile(sess.username, profile);
           fpEl.textContent = profile.fp; rankEl.textContent = rankFromFP(profile.fp);
-          renderItems(); renderOwned();
+          await renderItems(); await renderOwned();
         });
         holder.appendChild(card);
-      });
+      }
     }
 
-    function renderOwned(){
+    async function renderOwned(){
       const holder = $('#owned', wrap); holder.innerHTML='';
-      if(!profile.owned.length){ holder.innerHTML = '<div style="opacity:.7">—</div>'; return; }
+      if(!profile.owned?.length){ holder.innerHTML = '<div style="opacity:.7">—</div>'; return; }
       profile.owned.forEach(it=>{
         const row = document.createElement('div'); row.className='panel'; row.style.marginBottom='6px';
         row.innerHTML = `<div class="row" style="justify-content:space-between"><div>${it.name}</div><div style="opacity:.8">${it.type}</div></div>`;
@@ -134,22 +124,20 @@
     }
 
     // Events
-    godSel.addEventListener('change', ()=>{ profile.god = godSel.value; saveProfile(sess.username, profile); renderItems(); });
+    godSel.addEventListener('change', async ()=>{
+      profile.god = godSel.value; await RemoteStore.saveProfile(sess.username, profile); await renderItems();
+    });
     q.addEventListener('input', renderItems);
-    $('#fpPlus', wrap)?.addEventListener('click', ()=>{ profile.fp++; saveProfile(sess.username, profile); fpEl.textContent=profile.fp; rankEl.textContent=rankFromFP(profile.fp); });
-    $('#fpMinus', wrap)?.addEventListener('click', ()=>{ profile.fp--; saveProfile(sess.username, profile); fpEl.textContent=profile.fp; rankEl.textContent=rankFromFP(profile.fp); });
+    $('#fpPlus', wrap)?.addEventListener('click', async ()=>{ profile.fp++; await RemoteStore.saveProfile(sess.username, profile); fpEl.textContent=profile.fp; rankEl.textContent=rankFromFP(profile.fp); });
+    $('#fpMinus', wrap)?.addEventListener('click', async ()=>{ profile.fp--; await RemoteStore.saveProfile(sess.username, profile); fpEl.textContent=profile.fp; rankEl.textContent=rankFromFP(profile.fp); });
 
-    renderItems(); renderOwned();
+    await renderItems(); await renderOwned();
   }
 
-  // Wire navigation
   document.addEventListener('DOMContentLoaded', ()=>{
-    const btn = document.getElementById('goStore');
-    if(btn){ btn.addEventListener('click', mount); }
-    // Auto-mount store after login
-    const sess = Core.getSession(); if(sess){ mount(); }
+    document.getElementById('goStore')?.addEventListener('click', ()=>{ mount(); });
+    if(Core.getSession()) mount(); // auto-mount post-login
   });
 
-  // expose minimal API if needed later
   window.Store = { mount };
 })();
