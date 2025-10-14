@@ -1,36 +1,27 @@
-// Character Sheet Module (Phase 3)
-// - Per-user sheet stored inside profile under .sheet
-// - Simple form UI rendered into #viewRoot
-// - Works with EN/EL via I18N.t (falls back to English)
+// Character Sheet (Remote Supabase)
 
 (function(){
-  const PROFILES_KEY = 'divine_profiles_v1';
-  const $ = (sel,root=document)=>root.querySelector(sel);
-  const t = (k, d)=> (window.I18N?.t?.(k,d)) || k;
+  const $ = (s,r=document)=>r.querySelector(s);
+  const t = (k,d)=> (window.I18N?.t?.(k,d)) || k;
 
-  function loadProfiles(){ try{ const raw = localStorage.getItem(PROFILES_KEY); return raw? JSON.parse(raw): {}; }catch(e){ return {}; } }
-  function saveProfiles(v){ localStorage.setItem(PROFILES_KEY, JSON.stringify(v)); }
-
-  function ensureProfile(username){
-    const all = loadProfiles();
-    if(!all[username]) all[username]={ name:username, god:'Tyr/Bahamut', level:1, fp:10, owned:[], lock:false };
-    if(!all[username].sheet){
-      all[username].sheet = {
-        prof:'+2', ac:'', hp:'', speed:'30 ft',
-        str:'', dex:'', con:'', int:'', wis:'', cha:'',
-        skills:'', inv:'', spells:'', notes:''
-      };
-    }
-    saveProfiles(all);
-    return all[username];
+  function defaultSheet(){
+    return {
+      prof:'+2', ac:'', hp:'', speed:'30 ft',
+      str:'', dex:'', con:'', int:'', wis:'', cha:'',
+      skills:'', inv:'', spells:'', notes:''
+    };
   }
 
-  function saveProfile(username, data){ const all=loadProfiles(); all[username]=data; saveProfiles(all); }
+  async function mount(){
+    const sess = Core.getSession(); if(!sess) return;
+    let profile = await RemoteStore.loadProfile(sess.username);
+    if(!profile){
+      profile = { id:Math.random().toString(36).slice(2,10), name:sess.username, god:'Tyr/Bahamut', level:1, fp:10, owned:[], lock:false, sheet: defaultSheet() };
+      await RemoteStore.saveProfile(sess.username, profile);
+    }
+    if(!profile.sheet){ profile.sheet = defaultSheet(); await RemoteStore.saveProfile(sess.username, profile); }
 
-  function mount(){
-    const sess = window.Core?.getSession?.(); if(!sess) return;
-    const profile = ensureProfile(sess.username);
-    const root = $('#viewRoot'); root.innerHTML='';
+    const root = document.getElementById('viewRoot'); root.innerHTML='';
 
     const el = document.createElement('div');
     el.innerHTML = `
@@ -71,9 +62,9 @@
     `;
     root.appendChild(el);
 
-    // Map helpers
-    const map = (id,val)=>{ const e=$('#'+id, el); if(e) e.value=val??''; };
+    // Populate
     const S = profile.sheet || {};
+    const map = (id,val)=>{ const e=$('#'+id, el); if(e) e.value=val??''; };
     map('cs_name', profile.name);
     map('cs_class', profile.clazz);
     map('cs_level', profile.level);
@@ -89,8 +80,7 @@
     $('#cs_notes', el).value = S.notes||'';
 
     $('#sheetBack', el).addEventListener('click', ()=>{ root.innerHTML=''; });
-    $('#sheetSave', el).addEventListener('click', ()=>{
-      // Save back
+    $('#sheetSave', el).addEventListener('click', async ()=>{
       profile.name  = $('#cs_name', el).value;
       profile.clazz = $('#cs_class', el).value;
       profile.level = parseInt($('#cs_level', el).value||profile.level,10);
@@ -103,17 +93,14 @@
         ac:$('#cs_ac', el).value, hp:$('#cs_hp', el).value, speed:$('#cs_speed', el).value,
         skills: $('#cs_skills', el).value, inv:$('#cs_inv', el).value, spells:$('#cs_spells', el).value, notes:$('#cs_notes', el).value
       };
-      const all = loadProfiles(); all[sess.username]=profile; saveProfiles(all);
-      // Simple visual feedback
+      await RemoteStore.saveProfile(sess.username, profile);
       $('#sheetSave', el).textContent = t('saved')||'Saved';
       setTimeout(()=> $('#sheetSave', el).textContent = t('save')||'Save', 1200);
     });
   }
 
-  // Wire button
   document.addEventListener('DOMContentLoaded', ()=>{
-    const btn = document.getElementById('goSheet');
-    if(btn){ btn.addEventListener('click', mount); }
+    document.getElementById('goSheet')?.addEventListener('click', ()=>{ mount(); });
   });
 
   window.Sheet = { mount };
