@@ -3,21 +3,25 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Divine Interface — Per-God & Per-Character Profiles</title>
+<title>Divine Interface — Per-God & Per-Character Profiles (Enhanced)</title>
 <style>
   :root{
     --bg:#0b0f14; --panel:#121824; --accent:#7dd3fc; --accent2:#a78bfa; --text:#e6f0ff; --muted:#8aa1c9; --danger:#ff6b6b; --success:#8fff9f; --gold:#ffd166;
     --glow: 0 0 12px rgba(125,211,252,.65), 0 0 28px rgba(167,139,250,.45);
+  }
+  [data-theme="light"]{
+    --bg:#f6f7fb; --panel:#ffffff; --text:#0d1b2a; --muted:#4a607f; --accent:#2563eb; --accent2:#8b5cf6; --gold:#b7791f;
   }
   *{box-sizing:border-box}
   html,body{height:100%}
   body{margin:0;background:radial-gradient(1200px 800px at 20% -10%, rgba(124,58,237,.15), transparent 60%),
         radial-gradient(900px 700px at 120% 20%, rgba(14,165,233,.12), transparent 60%),
         var(--bg);
-       color:var(--text);font:16px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif;}
+       color:var(--text);font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;}
   .container{max-width:1260px;margin:24px auto;padding:16px}
   .app{display:grid;grid-template-columns: 300px 1fr; gap:16px}
-  .panel{background:linear-gradient(180deg, rgba(18,24,36,.85), rgba(18,24,36,.65)); border:1px solid rgba(125,211,252,.25); box-shadow:0 10px 30px rgba(2,8,23,.6), inset 0 0 60px rgba(124,58,237,.08); border-radius:14px;padding:14px}
+  .panel{background:linear-gradient(180deg, rgba(18,24,36,.85), rgba(18,24,36,.65)); border:1px solid rgba(125,211,252,.25); box-shadow:0 10px 30px rgba(2,8,23,.12), inset 0 0 60px rgba(124,58,237,.08); border-radius:14px;padding:14px}
+  [data-theme="light"] .panel{background:#fff;border-color:#e5e7eb;box-shadow:0 8px 20px rgba(2,8,23,.06)}
   h1{margin:0 0 8px;font-size:22px;letter-spacing:.08em;text-transform:uppercase}
   h2{margin:10px 0 8px;font-size:16px;letter-spacing:.06em}
   .btn{all:unset;cursor:pointer;padding:8px 10px;border-radius:10px;border:1px solid rgba(125,211,252,.35);background:rgba(125,211,252,.1);display:inline-flex;gap:8px;align-items:center}
@@ -27,12 +31,15 @@
   .field{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
   label{font-size:12px;opacity:.8}
   input, select, textarea{padding:10px 12px;border-radius:10px;border:1px solid rgba(125,211,252,.25);background:rgba(2,6,23,.45);color:var(--text)}
+  [data-theme="light"] input,[data-theme="light"] select,[data-theme="light"] textarea{background:#f8fafc;border-color:#e5e7eb;color:#0f172a}
   textarea{min-height:66px}
   .profiles{display:flex;flex-direction:column;gap:10px}
   .profileCard{padding:10px;border:1px solid rgba(125,211,252,.25);border-radius:12px;position:relative;background:linear-gradient(180deg, rgba(10,15,25,.7), rgba(10,15,25,.45));}
+  [data-theme="light"] .profileCard{background:#fff;border-color:#e5e7eb}
   .profileCard.active{outline:2px solid rgba(125,211,252,.45);box-shadow:var(--glow)}
   .profileHeader{display:flex;justify-content:space-between;gap:8px}
   .pill{font-size:11px;padding:4px 8px;border-radius:999px;border:1px solid rgba(125,211,252,.25);background:rgba(125,211,252,.08)}
+  [data-theme="light"] .pill{background:#f1f5f9;border-color:#e5e7eb}
   .meter{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px}
   .chip{padding:10px 12px;border-radius:12px;background:rgba(125,211,252,.08);border:1px solid rgba(125,211,252,.25);text-align:center}
   .fp{display:flex;align-items:center;gap:10px;justify-content:center}
@@ -45,23 +52,30 @@
   .search{margin:10px 0 0;display:flex;gap:10px}
   .list{display:grid;grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px;margin-top:12px}
   .card{position:relative;padding:12px;border-radius:12px;border:1px solid rgba(125,211,252,.25);background:linear-gradient(180deg, rgba(10,15,25,.7), rgba(10,15,25,.45));}
+  [data-theme="light"] .card{background:#fff;border-color:#e5e7eb}
   .card h3{margin:0 0 4px;font-size:15px;letter-spacing:.04em}
   .type{font-size:11px;opacity:.8}
   .desc{color:var(--muted);font-size:13px;margin:6px 0 10px}
   .cost{font-weight:700;color:var(--gold)}
   .btns{display:flex;gap:8px;flex-wrap:wrap}
   .owned{position:absolute;top:10px;right:10px;font-size:10px;padding:6px 8px;border-radius:999px;border:1px solid rgba(143,255,159,.35);background:rgba(143,255,159,.12);color:var(--success)}
+  .badgeActive{position:absolute;top:10px;left:10px;font-size:10px;padding:6px 8px;border-radius:999px;border:1px solid rgba(125,211,252,.35);background:rgba(125,211,252,.12)}
   .footer{display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:8px}
-  .log{max-height:200px;overflow:auto;padding:10px;border-radius:12px;border:1px dashed rgba(125,211,252,.25);background:rgba(2,6,23,.35);font-size:13px}
+  .log{max-height:220px;overflow:auto;padding:10px;border-radius:12px;border:1px dashed rgba(125,211,252,.25);background:rgba(2,6,23,.35);font-size:13px}
   @media (max-width: 1080px){.app{grid-template-columns:1fr}.list{grid-template-columns:1fr}}
+  @media print{ body{background:#fff;color:#000} .panel{box-shadow:none;border:none} #loginScreen,.tabs,.search,.footer,.meter{display:none} .list{grid-template-columns:1fr 1fr} }
 </style>
 </head>
 <body>
   <div class="container" id="appRoot" style="display:none">
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
-      <h1>DIVINE INTERFACE — GOD PACKS & CHARACTER PROFILES</h1>
+      <h1 id="ttl">DIVINE INTERFACE — GOD PACKS & CHARACTER PROFILES</h1>
       <div class="row">
         <div id="userBadge" class="pill" title="Current user">—</div>
+        <button class="btn" id="themeBtn" title="Theme">🌗</button>
+        <button class="btn" id="langBtn" title="Language">EN</button>
+        <button class="btn" id="longRestBtn" title="Long Rest">Long Rest</button>
+        <button class="btn" id="printBtn" title="Print">Print Owned</button>
         <button class="btn" id="logoutBtn">Logout</button>
         <button class="btn" id="importBtn">Import</button>
         <button class="btn" id="exportBtn">Export</button>
@@ -72,10 +86,10 @@
     <div class="app">
       <!-- LEFT: Profiles -->
       <aside class="panel" aria-label="Profiles">
-        <h2>Profiles</h2>
+        <h2 id="lblProfiles">Profiles</h2>
         <div id="profiles" class="profiles"></div>
         <hr style="border-color:rgba(125,211,252,.15);margin:12px 0">
-        <h2>Selected Profile</h2>
+        <h2 id="lblSelected">Selected Profile</h2>
         <div id="profileDetail"></div>
 
         <div id="adminTools" style="display:none;margin-top:10px">
@@ -95,12 +109,16 @@
             <button class="btn" data-admin="lock">Toggle Store Lock</button>
             <button class="btn danger" data-admin="clearOwned">Clear Owned</button>
           </div>
-          <div class="row" style="margin-top:8px">
-            <div class="field" style="flex:1"><label>Assign to User</label>
-              <select id="assignUser"></select>
+          <details style="margin-top:8px">
+            <summary class="btn">God Pack Editor (JSON)</summary>
+            <div class="field"><label>For God</label>
+              <select id="gpGodSel"></select>
             </div>
-            <button class="btn" data-admin="assignUser">Save Assignment</button>
-          </div>
+            <div class="field"><label>Items JSON</label>
+              <textarea id="gpJson" placeholder='[{"id":"x1","type":"Blessing","name":"...","cost":4,"desc":"..."}]'></textarea>
+            </div>
+            <div class="row"><button class="btn" id="gpApply">Apply</button><button class="btn" id="gpReset">Reset to Default</button></div>
+          </details>
         </div>
       </aside>
 
@@ -113,7 +131,7 @@
             <div class="value" id="fp">0</div>
             <button id="inc">+</button>
           </div>
-          <div class="chip">Owned: <b id="ownedCount">0</b></div>
+          <div class="chip">Owned: <b id="ownedCount">0</b> • Active: <b id="activeCount">0</b></div>
         </div>
 
         <div class="tabs" role="tablist">
@@ -131,7 +149,7 @@
         <div class="list" id="list" aria-live="polite"></div>
 
         <div class="footer">
-          <div class="kicker">Limit: 1 Major (≥6 FP) + 1 Minor (≤4 FP) active. Per-god exclusives respect chosen patron.</div>
+          <div class="kicker">Limit: 1 Major (≥6 FP) + 1 Minor (≤4 FP) active. Cooldowns: uses refresh on Long Rest.</div>
           <div class="row">
             <button class="btn" id="exportOwned">Export Owned</button>
             <button class="btn" id="clearOwned">Clear Owned</button>
@@ -202,7 +220,20 @@
   </dialog>
 
 <script>
-  // ===== DATA (from previous version) =====
+  // ===== I18N (UI labels only) =====
+  const L = {
+    en:{profiles:'Profiles', selected:'Selected Profile', longRest:'Long Rest complete. Cooldowns refreshed.', storeLocked:'Store is locked by Admin.', adminOnly:'Admin-only action.', invalid:'Invalid credentials.'},
+    el:{profiles:'Προφίλ', selected:'Επιλεγμένο Προφίλ', longRest:'Long Rest ολοκληρώθηκε. Τα cooldowns ανανεώθηκαν.', storeLocked:'Το store είναι κλειδωμένο από Admin.', adminOnly:'Μόνο για Admin.', invalid:'Λάθος στοιχεία.'}
+  };
+  let LANG = localStorage.getItem('divine_lang') || 'en';
+  function t(k){ return (L[LANG]||L.en)[k]||k; }
+  function syncLang(){ document.getElementById('lblProfiles').textContent=t('profiles'); document.getElementById('lblSelected').textContent=t('selected'); document.getElementById('langBtn').textContent = LANG.toUpperCase(); }
+
+  // ===== THEME =====
+  let THEME = localStorage.getItem('divine_theme') || 'dark';
+  function syncTheme(){ document.documentElement.setAttribute('data-theme', THEME==='light'?'light':'dark'); }
+
+  // ===== RANKS =====
   const RANKS = [
     {min:-999, name:'Forsaken'},
     {min:-4,   name:'Distant'},
@@ -212,48 +243,52 @@
     {min:15,   name:'Exemplar'}
   ];
 
-  const BASE_ITEMS = /* same as before */ null; // placeholder; will be injected from previous definition below
-  const GOD_PACKS = /* same as before */ null;
+  // ===== BASE & GOD PACKS (default) =====
+  const BASE_ITEMS_DEFAULT = [
+    {id:'b1',  type:'Blessing',  name:'Divine Guardian', cost:8,  desc:'Once per long rest, when you would die, you remain at 1 HP instead. The god’s sigil burns on your chest for 1 minute.', tags:['death','protection'], uses:1, cooldown:'longrest'},
+    {id:'b2',  type:'Blessing',  name:'Light of Ascension', cost:5, desc:'Radiant aura (15 ft) for 1 minute. Allies +1 to attack, undead have disadvantage.', tags:['radiant','aura'], uses:1, cooldown:'longrest'},
+    {id:'b3',  type:'Blessing',  name:'Echo of the God', cost:4,  desc:'Summon a spectral avatar for 30 sec; fights as an ally (1d8 + CHA radiant).', tags:['summon','avatar'], uses:1, cooldown:'longrest'},
+    {id:'b4',  type:'Blessing',  name:'Divine Vision', cost:3,    desc:'Gain Truesight (10 ft) and detect divine/undead for 10 minutes.', tags:['vision','detect'], uses:2, cooldown:'longrest'},
+    {id:'b5',  type:'Blessing',  name:'Blessed Resurgence', cost:3, desc:'Regain 2d8 + CHA/WIS HP as a bonus action; wounds close with light.', tags:['heal'], uses:2, cooldown:'longrest'},
+    {id:'b6',  type:'Blessing',  name:'Fate Rewind', cost:10,     desc:'Once per Round, undo a failed roll or event within 1 minute — rewrites local fate.', tags:['fate','rewind'], uses:1, cooldown:'story'},
+    {id:'b7',  type:'Blessing',  name:'Heaven’s Call', cost:6,    desc:'Summon a flying divine mount for 10 minutes.', tags:['mount','flight','summon'], uses:1, cooldown:'longrest'},
+    {id:'b8',  type:'Blessing',  name:'Voice of the Divine', cost:4, desc:'Speak any language; advantage on Persuasion/Intimidation vs mortals for 1 hour.', tags:['social','tongues'], uses:2, cooldown:'longrest'},
+    {id:'b9',  type:'Blessing',  name:'Wrath of Faith', cost:5,    desc:'Next attack deals +2d8 radiant or necrotic (your god decides).', tags:['smite','burst'], uses:1, cooldown:'longrest'},
+    {id:'b10', type:'Blessing',  name:'Grace of Mercy', cost:4,    desc:'When you heal an ally, restore +1d6 HP and remove one condition (poisoned, frightened, charmed).', tags:['cleanse','support'], uses:1, cooldown:'longrest'},
+    {id:'e11', type:'Equipment', name:'Relic Weapon', cost:6,      desc:'Your weapon becomes divine-forged. Magical, +1 to hit and damage.', tags:['weapon','+1'], uses:0},
+    {id:'e12', type:'Equipment', name:'Armor of the Faithful', cost:6, desc:'+1 AC; resistance to radiant or necrotic (based on god).', tags:['armor','resist'], uses:0},
+    {id:'e13', type:'Equipment', name:'Halo Fragment', cost:3,      desc:'Hovering ring grants +1 to all saving throws for 1 hour.', tags:['save','halo'], uses:1, cooldown:'longrest'},
+    {id:'e14', type:'Equipment', name:'Mantle of the Chosen', cost:7, desc:'Once per day, fly 30 ft for 1 minute; luminous wings unfold.', tags:['flight','mobility'], uses:1, cooldown:'longrest'},
+    {id:'e15', type:'Equipment', name:'Divine Sigil Pendant', cost:5, desc:'Holy focus; +1 spell attack & DC for divine spells.', tags:['focus','spell'], uses:0},
+    {id:'e16', type:'Equipment', name:'Crown of Radiance', cost:8,  desc:'Enemies within 10 ft have disadvantage on WIS saves; allies gain advantage vs fear.', tags:['aura','fear'], uses:0},
+    {id:'e17', type:'Equipment', name:'Vine-Root Gauntlets', cost:5,desc:'On melee hit, restrain target with vines/shadows (DC 13 STR), 1/rest.', tags:['control','melee'], uses:1, cooldown:'longrest'},
+    {id:'e18', type:'Equipment', name:'Mirror of Judgement', cost:7, desc:'Once per long rest, reflect a spell (≤3rd level) back at its caster.', tags:['reflect','counter'], uses:1, cooldown:'longrest'},
+    {id:'e19', type:'Equipment', name:'Mark of Chaos', cost:5,      desc:'When hit, roll d6: on 5–6, rebound half damage to attacker.', tags:['chaos','retaliate'], uses:2, cooldown:'longrest'},
+    {id:'b20', type:'Blessing',  name:'Oath of Eternity', cost:12,  desc:'Permanent divine favor: advantage on death saves; immune to magical aging.', tags:['death','eternity'], uses:0}
+  ];
+
+  const GOD_PACKS_DEFAULT = {
+    'Tyr/Bahamut':[ {id:'t1', type:'Blessing', name:'Aegis of Law', cost:4, god:'Tyr/Bahamut', desc:'+2 AC vs the next attack this round; if it misses, you gain +1 FP.', tags:['law','shield'], uses:1, cooldown:'longrest'}, {id:'t2', type:'Equipment', name:'Sword of Verdict', cost:7, god:'Tyr/Bahamut', desc:'On hit, mark target "Judged" for 1 min; first ally attacking it gains advantage.', tags:['mark','ally'], uses:0}, {id:'t3', type:'Blessing', name:'Merciful Edict', cost:3, god:'Tyr/Bahamut', desc:'Spare the Dying at 30 ft as bonus action; healed targets gain temp HP = level.', tags:['mercy','stabilize'], uses:2, cooldown:'longrest'}, {id:'t4', type:'Equipment', name:'Scales of Justice', cost:6, god:'Tyr/Bahamut', desc:'Once per rest, convert damage you take into temp HP for an ally (up to your level).', tags:['transfer','protect'], uses:1, cooldown:'longrest'} ],
+    'Raven Queen':[ {id:'r1', type:'Blessing', name:'Winter’s Claim', cost:4, god:'Raven Queen', desc:'Next hit chills the soul: speed halved and target cannot heal until your next turn.', tags:['chill','healing-block'], uses:1, cooldown:'longrest'}, {id:'r2', type:'Equipment', name:'Memory Shard', cost:6, god:'Raven Queen', desc:'Once per rest, learn one secret about a foe (resist, HP range, or weakness).', tags:['lore','reveal'], uses:1, cooldown:'longrest'}, {id:'r3', type:'Blessing', name:'Kiss of the Grave', cost:5, god:'Raven Queen', desc:'When you drop a creature to 0 HP, regain a spent spell slot (≤2nd) or 1 HD.', tags:['leech','slot'], uses:1, cooldown:'longrest'}, {id:'r4', type:'Equipment', name:'Crown of Ravens', cost:8, god:'Raven Queen', desc:'Spectral ravens harry enemies: start of their turn, DC 13 WIS or take 1d6 psychic.', tags:['aura','psychic'], uses:0} ],
+    'Silvanus':[ {id:'s1', type:'Blessing', name:'Verdant Surge', cost:4, god:'Silvanus', desc:'Burst of vines heals allies in 10 ft for 1d6 and grants +2 temp HP.', tags:['heal','vines'], uses:1, cooldown:'longrest'}, {id:'s2', type:'Equipment', name:'Barkskin Mantle', cost:6, god:'Silvanus', desc:'Gain natural armor (AC 16 if not higher) for 10 minutes.', tags:['armor','nature'], uses:1, cooldown:'longrest'}, {id:'s3', type:'Blessing', name:'Thornbind', cost:5, god:'Silvanus', desc:'Root enemies: STR save DC 13 or restrained until damaged.', tags:['control','root'], uses:1, cooldown:'longrest'}, {id:'s4', type:'Equipment', name:'Seed of Ages', cost:7, god:'Silvanus', desc:'Plant a seed to create 10 ft cover grove for 1 minute; entering enemies are slowed.', tags:['terrain','slow'], uses:1, cooldown:'longrest'} ],
+    'Corellon':[ {id:'c1', type:'Blessing', name:'Muse’s Spark', cost:3, god:'Corellon', desc:'Reroll one CHA-based check; add +1d4.', tags:['inspire','cha'], uses:2, cooldown:'longrest'}, {id:'c2', type:'Equipment', name:'Lute of Starlight', cost:6, god:'Corellon', desc:'Perform 1 min to grant allies advantage on first save within next hour.', tags:['perform','buff'], uses:1, cooldown:'longrest'}, {id:'c3', type:'Blessing', name:'Steps of Freedom', cost:4, god:'Corellon', desc:'Ignore difficult terrain for 10 minutes; step on water briefly.', tags:['mobility','freedom'], uses:1, cooldown:'longrest'}, {id:'c4', type:'Equipment', name:'Mask of Many Gleams', cost:7, god:'Corellon', desc:'Disguise self at will for 1 hour.', tags:['disguise','trick'], uses:2, cooldown:'longrest'} ]
+  };
 
   // ===== STORAGE KEYS =====
-  const STORAGE_KEY = 'divine_interface_profiles_v1';
+  const STORAGE_KEY = 'divine_interface_profiles_v2';
   const USERS_KEY   = 'divine_interface_users_v1';
   const SESSION_KEY = 'divine_interface_session_v1';
-
-  // ===== RUNTIME (filled later after we inject items) =====
-  let BASE_ITEMS_DATA = [];
-  let GOD_PACKS_DATA = {};
+  const PACKS_KEY   = 'divine_interface_godpacks_v1';
 
   // ===== USERS / AUTH =====
-  function loadUsers(){
-    try{ const raw = localStorage.getItem(USERS_KEY); return raw ? JSON.parse(raw) : []; }catch(e){ return []; }
-  }
+  function loadUsers(){ try{ const raw = localStorage.getItem(USERS_KEY); return raw ? JSON.parse(raw) : []; }catch(e){ return []; } }
   function saveUsers(v){ localStorage.setItem(USERS_KEY, JSON.stringify(v)); }
   function getSession(){ try{ return JSON.parse(localStorage.getItem(SESSION_KEY)||'null'); }catch(e){ return null; } }
   function setSession(s){ localStorage.setItem(SESSION_KEY, JSON.stringify(s)); }
 
-  // Seed demo users & profiles
-  function seedDemo(){
-    const users = loadUsers();
-    if(users.length===0){
-      const demo = [
-        {id:rid(), username:'admin', password:'admin', role:'admin'},
-        {id:rid(), username:'galahad', password:'faith', role:'player'},
-        {id:rid(), username:'alucard', password:'grave', role:'player'},
-        {id:rid(), username:'ivy', password:'green', role:'player'},
-        {id:rid(), username:'bombadil', password:'song', role:'player'}
-      ];
-      saveUsers(demo);
-    }
-    if(!localStorage.getItem(STORAGE_KEY)){
-      localStorage.setItem(STORAGE_KEY, JSON.stringify([
-        {id:rid(), name:'Sir Galahad (Joe Dalton)', clazz:'Paladin', level:1, god:'Tyr/Bahamut', align:'Lawful Good', fp:10, notes:'Justice, mercy, oathbrand.', owned:[], lock:false, owner:'galahad'},
-        {id:rid(), name:'Alucard (Lucas Hood)', clazz:'Vampire Warrior', level:1, god:'Raven Queen', align:'Neutral Evil', fp:10, notes:'Hunger, control, grave kiss.', owned:[], lock:false, owner:'alucard'},
-        {id:rid(), name:'Poison Ivy (Catherine Tramell)', clazz:'Druid', level:1, god:'Silvanus', align:'Neutral Good', fp:10, notes:'Growth, thorns, seduction.', owned:[], lock:false, owner:'ivy'},
-        {id:rid(), name:'Tom Bombadil (Κορίνα)', clazz:'Bard', level:1, god:'Corellon', align:'Chaotic Good', fp:10, notes:'Freedom, song, trickster joy.', owned:[], lock:false, owner:'bombadil'}
-      ]));
-    }
-  }
+  // ===== PACKS PERSISTENCE =====
+  function loadPacks(){ try{ const raw = localStorage.getItem(PACKS_KEY); return raw? JSON.parse(raw): {base:BASE_ITEMS_DEFAULT, packs:GOD_PACKS_DEFAULT}; }catch(e){ return {base:BASE_ITEMS_DEFAULT, packs:GOD_PACKS_DEFAULT}; } }
+  function savePacks(v){ localStorage.setItem(PACKS_KEY, JSON.stringify(v)); }
 
   // ===== PROFILES DATA =====
   function rid(){ return Math.random().toString(36).slice(2,10); }
@@ -270,8 +305,11 @@
   const loginMsg = document.getElementById('loginMsg');
   const logoutBtn = document.getElementById('logoutBtn');
   const userBadge = document.getElementById('userBadge');
+  const themeBtn = document.getElementById('themeBtn');
+  const langBtn = document.getElementById('langBtn');
+  const longRestBtn = document.getElementById('longRestBtn');
+  const printBtn = document.getElementById('printBtn');
 
-  // Refs from previous code (render etc.)
   const profilesEl = document.getElementById('profiles');
   const profileDetailEl = document.getElementById('profileDetail');
   const listEl = document.getElementById('list');
@@ -279,11 +317,16 @@
   const fpEl = document.getElementById('fp');
   const rankEl = document.getElementById('rank');
   const ownedCountEl = document.getElementById('ownedCount');
+  const activeCountEl = document.getElementById('activeCount');
   const logEl = document.getElementById('log');
   const searchEl = document.getElementById('search');
   const adminTools = document.getElementById('adminTools');
   const assignUserSel = document.getElementById('assignUser');
   const adminSetFP = document.getElementById('adminSetFP');
+  const gpGodSel = document.getElementById('gpGodSel');
+  const gpJson = document.getElementById('gpJson');
+  const gpApply = document.getElementById('gpApply');
+  const gpReset = document.getElementById('gpReset');
 
   // Tabs
   let activeFilter = 'all';
@@ -300,94 +343,112 @@
   let profiles = [];
   let activeId = null;
   let session = null; // {userId, username, role}
+  let PACKS = loadPacks();
 
   // ===== LOGIN FLOW =====
-  seedBtn.addEventListener('click', ()=>{ seedDemo(); loginMsg.textContent='Seeded demo users (admin/admin) & sample profiles.'; });
+  seedBtn.addEventListener('click', ()=>{
+    const users = loadUsers();
+    if(users.length===0){ saveUsers([
+      {id:rid(), username:'admin', password:'admin', role:'admin'},
+      {id:rid(), username:'galahad', password:'faith', role:'player'},
+      {id:rid(), username:'alucard', password:'grave', role:'player'},
+      {id:rid(), username:'ivy', password:'green', role:'player'},
+      {id:rid(), username:'bombadil', password:'song', role:'player'}
+    ]); }
+    if(!localStorage.getItem(STORAGE_KEY)){
+      saveProfiles([
+        {id:rid(), name:'Sir Galahad (Joe Dalton)', clazz:'Paladin', level:1, god:'Tyr/Bahamut', align:'Lawful Good', fp:10, notes:'Justice, mercy, oathbrand.', owned:[], lock:false, owner:'galahad', activeMajor:null, activeMinor:null},
+        {id:rid(), name:'Alucard (Lucas Hood)', clazz:'Vampire Warrior', level:1, god:'Raven Queen', align:'Neutral Evil', fp:10, notes:'Hunger, control, grave kiss.', owned:[], lock:false, owner:'alucard', activeMajor:null, activeMinor:null},
+        {id:rid(), name:'Poison Ivy (Catherine Tramell)', clazz:'Druid', level:1, god:'Silvanus', align:'Neutral Good', fp:10, notes:'Growth, thorns, seduction.', owned:[], lock:false, owner:'ivy', activeMajor:null, activeMinor:null},
+        {id:rid(), name:'Tom Bombadil (Κορίνα)', clazz:'Bard', level:1, god:'Corellon', align:'Chaotic Good', fp:10, notes:'Freedom, song, trickster joy.', owned:[], lock:false, owner:'bombadil', activeMajor:null, activeMinor:null}
+      ]);
+    }
+    if(!localStorage.getItem(PACKS_KEY)) savePacks({base:BASE_ITEMS_DEFAULT, packs:GOD_PACKS_DEFAULT});
+    loginMsg.textContent='Seeded demo users (admin/admin), profiles & default packs.';
+  });
+
   loginBtn.addEventListener('click', ()=>{
     const u = (L_user.value||'').trim(); const p=(L_pass.value||'').trim();
     const users = loadUsers();
     const found = users.find(x=>x.username===u && x.password===p);
-    if(!found){ loginMsg.textContent='Invalid credentials.'; return; }
+    if(!found){ loginMsg.textContent=t('invalid'); return; }
     session = {userId:found.id, username:found.username, role:found.role};
-    setSession(session);
-    startApp();
+    setSession(session); startApp();
   });
   logoutBtn.addEventListener('click', ()=>{ localStorage.removeItem(SESSION_KEY); session=null; location.reload(); });
 
+  // ===== App start =====
   function startApp(){
-    BASE_ITEMS_DATA = window.__BASE_ITEMS__;
-    GOD_PACKS_DATA = window.__GOD_PACKS__;
-    profiles = loadProfiles();
-    // If player, restrict to assigned profile, else default first
-    const users = loadUsers();
-    const u = users.find(x=>x.id===session.userId);
+    profiles = loadProfiles(); PACKS = loadPacks();
     userBadge.textContent = `${session.username} • ${session.role}`;
     if(session.role==='player'){
-      // find profile owned by this username
       const ownedProfile = profiles.find(p=>p.owner===session.username);
       if(ownedProfile){ activeId = ownedProfile.id; }
-      // Hide controls the player shouldn't have
       document.getElementById('newProfileBtn').style.display='none';
       document.getElementById('importBtn').style.display='none';
       document.getElementById('exportBtn').style.display='none';
       adminTools.style.display='none';
-    } else {
-      // admin
+    } else { // admin
       if(profiles[0]) activeId = profiles[0].id;
       adminTools.style.display='block';
       populateAssignUser();
+      populateGodPackEditor();
     }
     loginScreen.style.display='none';
     appRoot.style.display='block';
+    syncTheme(); syncLang();
     renderAll();
   }
 
+  // ===== Theme & language & print & long rest =====
+  themeBtn.addEventListener('click', ()=>{ THEME = (THEME==='dark'?'light':'dark'); localStorage.setItem('divine_theme', THEME); syncTheme(); });
+  langBtn.addEventListener('click', ()=>{ LANG = (LANG==='en'?'el':'en'); localStorage.setItem('divine_lang', LANG); syncLang(); });
+  printBtn.addEventListener('click', ()=>{ window.print(); });
+  longRestBtn.addEventListener('click', ()=>{ const p=getActive(); if(!p) return; (p.owned||[]).forEach(it=>{ if(it.cooldown==='longrest'){ it.usesLeft = it.uses||1; } }); saveProfiles(profiles); renderOwned(); log(t('longRest')); });
+
   function populateAssignUser(){
     const users = loadUsers();
-    assignUserSel.innerHTML = '<option value="">— select user —</option>' + users.map(u=>`<option value="${u.username}">${u.username} (${u.role})</option>`).join('');
+    if(!document.getElementById('assignUser')) return;
+    const selHtml = '<div class="field"><label>Assign to User</label><select id="assignUser">' + ['','admin',...users.map(u=>u.username)].map(x=>`<option value="${x}">${x||'—'}</option>`).join('') + '</select></div>';
+    adminTools.querySelector('details').insertAdjacentHTML('beforebegin', selHtml);
   }
 
-  // ===== ADMIN TOOL HANDLERS =====
-  document.getElementById('adminTools').addEventListener('click', (e)=>{
-    const act = e.target?.dataset?.admin; if(!act) return;
-    const p = getActive(); if(!p) return;
-    if(act==='fp+1') p.fp += 1;
-    if(act==='fp+5') p.fp += 5;
-    if(act==='fp-1') p.fp -= 1;
-    if(act==='fp-5') p.fp -= 5;
-    if(act==='setFP'){ const v = parseInt(adminSetFP.value||'0',10); p.fp = v; }
-    if(act==='lock'){ p.lock = !p.lock; log(`Store lock for <b>${p.name}</b>: ${p.lock?'ON':'OFF'}`); }
-    if(act==='clearOwned'){ if(confirm('Clear owned for this profile?')){ p.owned=[]; }}
-    if(act==='assignUser'){ const val = assignUserSel.value||''; p.owner = val; log(`Assigned profile <b>${p.name}</b> to user <b>${val||'—'}</b>`); }
-    saveProfiles(profiles); renderAll();
-  });
+  function populateGodPackEditor(){
+    const gods = Object.keys(PACKS.packs);
+    gpGodSel.innerHTML = gods.map(g=>`<option>${g}</option>`).join('');
+    gpGodSel.value = gods[0];
+    gpJson.value = JSON.stringify(PACKS.packs[gods[0]], null, 2);
+  }
+  gpGodSel?.addEventListener('change', ()=>{ gpJson.value = JSON.stringify(PACKS.packs[gpGodSel.value]||[], null, 2); });
+  gpApply?.addEventListener('click', ()=>{ try{ const arr = JSON.parse(gpJson.value); PACKS.packs[gpGodSel.value] = arr; savePacks(PACKS); renderList(); log('God Pack updated.'); }catch(e){ alert('Invalid JSON'); }});
+  gpReset?.addEventListener('click', ()=>{ PACKS = {base:BASE_ITEMS_DEFAULT, packs:GOD_PACKS_DEFAULT}; savePacks(PACKS); populateGodPackEditor(); renderList(); log('Packs reset to default.'); });
 
-  // ===== STORE & RENDERING (role-aware) =====
+  // ===== Store & rendering =====
   const resetBtn = document.getElementById('reset');
   const exportOwnedBtn = document.getElementById('exportOwned');
   const clearOwnedBtn = document.getElementById('clearOwned');
 
   resetBtn.addEventListener('click', ()=>{ searchEl.value=''; activeFilter='all'; document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active')); document.querySelector('.tab[data-filter="all"]').classList.add('active'); renderList(); });
   exportOwnedBtn.addEventListener('click', ()=>{ const p=getActive(); if(!p) return; const blob = new Blob([JSON.stringify({profile:p, owned:p.owned}, null, 2)],{type:'application/json'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download=`owned-${p.name}.json`; a.click(); URL.revokeObjectURL(url); });
-  clearOwnedBtn.addEventListener('click', ()=>{ const p=getActive(); if(!p) return; if(session.role!=='admin'){ alert('Only admin can clear owned.'); return; } if(confirm('Remove all owned for this profile?')){ p.owned=[]; saveProfiles(profiles); renderOwned(); renderList(); }});
+  clearOwnedBtn.addEventListener('click', ()=>{ const p=getActive(); if(!p) return; if(session.role!=='admin'){ alert(t('adminOnly')); return; } if(confirm('Remove all owned for this profile?')){ p.owned=[]; saveProfiles(profiles); renderOwned(); renderList(); }});
 
-  document.getElementById('inc').addEventListener('click', ()=>{ const p=getActive(); if(!p) return; if(session.role!=='admin'){ alert('Only admin can adjust FP directly.'); return; } p.fp++; saveProfiles(profiles); syncMeter(); });
-  document.getElementById('dec').addEventListener('click', ()=>{ const p=getActive(); if(!p) return; if(session.role!=='admin'){ alert('Only admin can adjust FP directly.'); return; } p.fp--; saveProfiles(profiles); syncMeter(); });
+  document.getElementById('inc').addEventListener('click', ()=>{ const p=getActive(); if(!p) return; if(session.role!=='admin'){ alert(t('adminOnly')); return; } p.fp++; saveProfiles(profiles); syncMeter(); });
+  document.getElementById('dec').addEventListener('click', ()=>{ const p=getActive(); if(!p) return; if(session.role!=='admin'){ alert(t('adminOnly')); return; } p.fp--; saveProfiles(profiles); syncMeter(); });
 
   document.getElementById('exportBtn').addEventListener('click', ()=>{
-    const blob = new Blob([JSON.stringify({profiles, users:loadUsers()}, null, 2)],{type:'application/json'});
+    const blob = new Blob([JSON.stringify({profiles, users:loadUsers(), packs:PACKS}, null, 2)],{type:'application/json'});
     const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download='divine-data.json'; a.click(); URL.revokeObjectURL(url);
   });
   document.getElementById('importBtn').addEventListener('click', ()=>{
     const i = document.createElement('input'); i.type='file'; i.accept='.json'; i.onchange = () => {
-      const file = i.files[0]; if(!file) return; const fr=new FileReader(); fr.onload = ()=>{ try{ const data=JSON.parse(fr.result); if(data.users) saveUsers(data.users); if(data.profiles) saveProfiles(data.profiles); profiles=loadProfiles(); renderAll(); log('Imported data.'); }catch(e){ alert('Invalid file'); } }; fr.readAsText(file);
+      const file = i.files[0]; if(!file) return; const fr=new FileReader(); fr.onload = ()=>{ try{ const data=JSON.parse(fr.result); if(data.users) saveUsers(data.users); if(data.profiles) saveProfiles(data.profiles); if(data.packs) savePacks(data.packs); profiles=loadProfiles(); PACKS=loadPacks(); renderAll(); log('Imported data.'); }catch(e){ alert('Invalid file'); } }; fr.readAsText(file);
     }; i.click();
   });
 
   const profilesListEl = document.getElementById('profiles');
   const newProfileBtn = document.getElementById('newProfileBtn');
 
-  newProfileBtn.addEventListener('click', ()=>{ if(session.role!=='admin'){ alert('Only admin can create profiles.'); return; } openProfileModal(); });
+  newProfileBtn.addEventListener('click', ()=>{ if(session.role!=='admin'){ alert(t('adminOnly')); return; } openProfileModal(); });
 
   function openProfileModal(p=null){
     const modal = document.getElementById('modal');
@@ -410,7 +471,7 @@
     modal.showModal();
     document.getElementById('saveProfile').onclick = (e)=>{
       e.preventDefault();
-      const payload = { id: p?.id || rid(), name:fName.value.trim(), clazz:fClass.value.trim(), level:parseInt(fLevel.value||'1',10), god:fGod.value, align:fAlign.value, fp:parseInt(fFP.value||'0',10), notes:fNotes.value.trim(), owned: p?.owned||[], lock: p?.lock||false, owner: p?.owner||'' };
+      const payload = { id: p?.id || rid(), name:fName.value.trim(), clazz:fClass.value.trim(), level:parseInt(fLevel.value||'1',10), god:fGod.value, align:fAlign.value, fp:parseInt(fFP.value||'0',10), notes:fNotes.value.trim(), owned: p?.owned||[], lock: p?.lock||false, owner: p?.owner||'', activeMajor: p?.activeMajor||null, activeMinor: p?.activeMinor||null };
       if(!payload.name){ alert('Name required'); return; }
       if(p){ const ix = profiles.findIndex(z=>z.id===p.id); profiles[ix]=payload; }
       else { profiles.push(payload); }
@@ -437,8 +498,9 @@
         <div class="row" style="margin-top:8px;gap:6px;font-size:12px;opacity:.85">
           <span class="pill">FP: ${p.fp}</span>
           <span class="pill">Owned: ${p.owned?.length||0}</span>
+          <span class="pill">Active: ${(p.activeMajor?1:0)+(p.activeMinor?1:0)}/2</span>
           <span class="pill">${p.align}</span>
-          ${p.lock?'<span class="pill" style="border-color:rgba(255,107,107,.5);color:#ffb3b3">LOCKED</span>':''}
+          ${p.lock?'<span class="pill" style="border-color:rgba(255,107,107,.5);color:#ff4d4f">LOCKED</span>':''}
         </div>
       `;
       card.addEventListener('click',(ev)=>{ if((ev.target.closest('button'))) return; activeId=p.id; renderAll(); });
@@ -453,8 +515,7 @@
   function renderProfileDetail(){
     const p = getActive();
     if(!p){ profileDetailEl.innerHTML = '<div class="pill">No profile selected.</div>'; adminTools.style.display = session.role==='admin'?'block':'none'; return; }
-    // Populate assign user list for admin
-    if(session.role==='admin'){ populateAssignUser(); assignUserSel.value = p.owner||''; adminSetFP.value = p.fp; }
+    if(session.role==='admin'){ assignUserSel && (assignUserSel.value = p.owner||''); adminSetFP && (adminSetFP.value = p.fp); populateGodPackEditor(); }
 
     profileDetailEl.innerHTML = `
       <div class="field"><label>God</label><div class="pill">${p.god}</div></div>
@@ -466,10 +527,12 @@
   }
 
   function getActive(){ return profiles.find(p=>p.id===activeId) || null; }
-  function syncMeter(){ const p=getActive(); if(!p){ fpEl.textContent='0'; rankEl.textContent='Distant'; return; } fpEl.textContent=p.fp; rankEl.textContent=rankFromFP(p.fp); }
+  function syncMeter(){ const p=getActive(); if(!p){ fpEl.textContent='0'; rankEl.textContent='Distant'; activeCountEl.textContent='0'; return; } fpEl.textContent=p.fp; rankEl.textContent=rankFromFP(p.fp); activeCountEl.textContent = (p.activeMajor?1:0)+(p.activeMinor?1:0); }
 
   function allowedByGod(item, god){ return !item.god || item.god===god; }
-  function currentCatalog(){ const god = getActive()?.god || 'Tyr/Bahamut'; const pack = (GOD_PACKS_DATA[god]||[]).map(x=>({...x, pack:true})); return [...BASE_ITEMS_DATA, ...pack]; }
+  function currentCatalog(){ const god = getActive()?.god || 'Tyr/Bahamut'; const pack = (PACKS.packs[god]||[]).map(x=>({...x, pack:true})); return [...PACKS.base, ...pack]; }
+
+  function isMajor(it){ return it.cost>=6; }
 
   function renderList(){
     const p = getActive(); if(!p){ listEl.innerHTML=''; return; }
@@ -489,7 +552,7 @@
       card.className = 'card';
       card.innerHTML = `
         ${ownedFlag ? '<div class="owned">Owned</div>' : ''}
-        <div class="type">${it.type}${it.pack?' • GodPack':''}${it.god?` • ${it.god}`:''}</div>
+        <div class="type">${it.type}${isMajor(it)?' • Major':' • Minor'}${it.pack?' • GodPack':''}${it.god?` • ${it.god}`:''}</div>
         <h3>${it.name}</h3>
         <div class="desc">${it.desc}</div>
         <div class="cost">Cost: ${it.cost} FP</div>
@@ -509,69 +572,59 @@
     const p = getActive(); if(!p){ ownedEl.innerHTML=''; ownedCountEl.textContent='0'; return; }
     ownedEl.innerHTML = '';
     (p.owned||[]).forEach(it => {
+      if(it.uses!=null && it.usesLeft==null) it.usesLeft = it.uses; // init
+      const isAct = (p.activeMajor===it.id || p.activeMinor===it.id);
       const card = document.createElement('div');
       card.className = 'card';
       card.innerHTML = `
+        ${isAct ? '<div class="badgeActive">Active</div>' : ''}
         <div class="owned">Owned</div>
-        <div class="type">${it.type}${it.pack?' • GodPack':''}${it.god?` • ${it.god}`:''}</div>
+        <div class="type">${it.type}${isMajor(it)?' • Major':' • Minor'}${it.pack?' • GodPack':''}${it.god?` • ${it.god}`:''}</div>
         <h3>${it.name}</h3>
         <div class="desc">${it.desc}</div>
-        <div class="cost">Cost: ${it.cost} FP</div>
+        <div class="cost">${it.uses!=null? `Uses: ${it.usesLeft||0}/${it.uses} • `:''} Cost: ${it.cost} FP</div>
         <div class="btns" style="margin-top:8px;">
-          <button class="btn" data-act="activate" ${p.lock?'disabled':''}>Activate</button>
+          <button class="btn" data-act="activate" ${p.lock?'disabled':''}>${isAct?'Deactivate':'Activate'}</button>
+          ${it.uses!=null? `<button class="btn" data-act="use" ${p.lock|| (it.usesLeft||0)<=0 ? 'disabled':''}>Use</button>`:''}
           ${session.role==='admin'? '<button class="btn" data-act="remove">Remove</button>' : ''}
         </div>
       `;
-      if(!p.lock){ card.querySelector('[data-act="activate"]').addEventListener('click', ()=>{ log(`Activated: <b>${it.name}</b> (apply at table by DM ruling).`); }); }
+      card.querySelector('[data-act="activate"]').addEventListener('click', ()=>{ toggleActive(it); });
+      if(it.uses!=null){ card.querySelector('[data-act="use"]').addEventListener('click', ()=>{ useItem(it); }); }
       if(session.role==='admin'){ card.querySelector('[data-act="remove"]').addEventListener('click', ()=>{ removeOwned(it.id); }); }
       ownedEl.appendChild(card);
     });
     ownedCountEl.textContent = (p.owned||[]).length;
+    syncMeter();
   }
 
-  function purchase(it){ const p=getActive(); if(!p) return; if(p.lock){ alert('Store is locked by Admin.'); return; } if(p.fp<it.cost) return; if(!p.owned) p.owned=[]; if(p.owned.some(x=>x.id===it.id)) return; p.fp -= it.cost; p.owned.push(it); saveProfiles(profiles); syncMeter(); renderList(); renderOwned(); log(`Purchased <b>${it.name}</b> (−${it.cost} FP). Remaining FP: <b>${p.fp}</b>`); }
-  function refund(it){ const p=getActive(); if(!p) return; if(session.role!=='admin'){ alert('Refund is admin-only.'); return; } const ix = p.owned.findIndex(x=>x.id===it.id); if(ix<0) return; p.owned.splice(ix,1); const refund = Math.max(1, Math.floor(it.cost*0.5)); p.fp += refund; saveProfiles(profiles); syncMeter(); renderList(); renderOwned(); log(`Refunded <b>${it.name}</b> (+${refund} FP).`); }
-  function removeOwned(id){ const p=getActive(); if(!p) return; p.owned = p.owned.filter(x=>x.id!==id); saveProfiles(profiles); renderOwned(); renderList(); }
+  function toggleActive(it){ const p=getActive(); if(!p) return; if(p.lock){ alert(t('storeLocked')); return; }
+    if(p.activeMajor===it.id || p.activeMinor===it.id){ // deactivate
+      if(p.activeMajor===it.id) p.activeMajor=null; if(p.activeMinor===it.id) p.activeMinor=null; saveProfiles(profiles); renderOwned(); return;
+    }
+    if(isMajor(it)){
+      if(p.activeMajor && p.activeMajor!==it.id){ alert('Major slot already in use. Deactivate first.'); return; }
+      p.activeMajor = it.id;
+    } else {
+      if(p.activeMinor && p.activeMinor!==it.id){ alert('Minor slot already in use. Deactivate first.'); return; }
+      p.activeMinor = it.id;
+    }
+    saveProfiles(profiles); renderOwned();
+  }
+
+  function useItem(it){ const p=getActive(); if(!p) return; if(p.lock){ alert(t('storeLocked')); return; } if(it.uses==null) return; if((it.usesLeft||0)<=0) return; it.usesLeft--; saveProfiles(profiles); renderOwned(); log(`Used <b>${it.name}</b>. Uses left: ${it.usesLeft}/${it.uses}`); }
+
+  function purchase(it){ const p=getActive(); if(!p) return; if(p.lock){ alert(t('storeLocked')); return; } if(p.fp<it.cost) return; if(!p.owned) p.owned=[]; if(p.owned.some(x=>x.id===it.id)) return; const copy = JSON.parse(JSON.stringify(it)); if(copy.uses!=null) copy.usesLeft = copy.uses; p.fp -= copy.cost; p.owned.push(copy); saveProfiles(profiles); syncMeter(); renderList(); renderOwned(); log(`Purchased <b>${copy.name}</b> (−${copy.cost} FP). Remaining FP: <b>${p.fp}</b>`); }
+  function refund(it){ const p=getActive(); if(!p) return; if(session.role!=='admin'){ alert(t('adminOnly')); return; } const ix = p.owned.findIndex(x=>x.id===it.id); if(ix<0) return; p.owned.splice(ix,1); const refund = Math.max(1, Math.floor(it.cost*0.5)); p.fp += refund; if(p.activeMajor===it.id) p.activeMajor=null; if(p.activeMinor===it.id) p.activeMinor=null; saveProfiles(profiles); syncMeter(); renderList(); renderOwned(); log(`Refunded <b>${it.name}</b> (+${refund} FP).`); }
+  function removeOwned(id){ const p=getActive(); if(!p) return; p.owned = p.owned.filter(x=>x.id!==id); if(p.activeMajor===id) p.activeMajor=null; if(p.activeMinor===id) p.activeMinor=null; saveProfiles(profiles); renderOwned(); renderList(); }
 
   function renderAll(){ renderProfiles(); renderProfileDetail(); syncMeter(); renderList(); renderOwned(); }
 
-  // Bootstrap: inject previous item catalogs into window for reuse
-  window.__BASE_ITEMS__ = [
-    {id:'b1',  type:'Blessing',  name:'Divine Guardian', cost:8,  desc:'Once per long rest, when you would die, you remain at 1 HP instead. The god’s sigil burns on your chest for 1 minute.', tags:['death','protection']},
-    {id:'b2',  type:'Blessing',  name:'Light of Ascension', cost:5, desc:'Radiant aura (15 ft) for 1 minute. Allies +1 to attack, undead have disadvantage.', tags:['radiant','aura']},
-    {id:'b3',  type:'Blessing',  name:'Echo of the God', cost:4,  desc:'Summon a spectral avatar for 30 sec; fights as an ally (1d8 + CHA radiant).', tags:['summon','avatar']},
-    {id:'b4',  type:'Blessing',  name:'Divine Vision', cost:3,    desc:'Gain Truesight (10 ft) and detect divine/undead for 10 minutes.', tags:['vision','detect']},
-    {id:'b5',  type:'Blessing',  name:'Blessed Resurgence', cost:3, desc:'Regain 2d8 + CHA/WIS HP as a bonus action; wounds close with light.', tags:['heal']},
-    {id:'b6',  type:'Blessing',  name:'Fate Rewind', cost:10,     desc:'Once per Round, undo a failed roll or event within 1 minute — rewrites local fate.', tags:['fate','rewind']},
-    {id:'b7',  type:'Blessing',  name:'Heaven’s Call', cost:6,    desc:'Summon a flying divine mount for 10 minutes.', tags:['mount','flight','summon']},
-    {id:'b8',  type:'Blessing',  name:'Voice of the Divine', cost:4, desc:'Speak any language; advantage on Persuasion/Intimidation vs mortals for 1 hour.', tags:['social','tongues']},
-    {id:'b9',  type:'Blessing',  name:'Wrath of Faith', cost:5,    desc:'Next attack deals +2d8 radiant or necrotic (your god decides).', tags:['smite','burst']},
-    {id:'b10', type:'Blessing',  name:'Grace of Mercy', cost:4,    desc:'When you heal an ally, restore +1d6 HP and remove one condition (poisoned, frightened, charmed).', tags:['cleanse','support']},
-    {id:'e11', type:'Equipment', name:'Relic Weapon', cost:6,      desc:'Your weapon becomes divine-forged. Magical, +1 to hit and damage.', tags:['weapon','+1']},
-    {id:'e12', type:'Equipment', name:'Armor of the Faithful', cost:6, desc:'+1 AC; resistance to radiant or necrotic (based on god).', tags:['armor','resist']},
-    {id:'e13', type:'Equipment', name:'Halo Fragment', cost:3,      desc:'Hovering ring grants +1 to all saving throws for 1 hour.', tags:['save','halo']},
-    {id:'e14', type:'Equipment', name:'Mantle of the Chosen', cost:7, desc:'Once per day, fly 30 ft for 1 minute; luminous wings unfold.', tags:['flight','mobility']},
-    {id:'e15', type:'Equipment', name:'Divine Sigil Pendant', cost:5, desc:'Holy focus; +1 spell attack & DC for divine spells.', tags:['focus','spell']},
-    {id:'e16', type:'Equipment', name:'Crown of Radiance', cost:8,  desc:'Enemies within 10 ft have disadvantage on WIS saves; allies gain advantage vs fear.', tags:['aura','fear']},
-    {id:'e17', type:'Equipment', name:'Vine-Root Gauntlets', cost:5,desc:'On melee hit, restrain target with vines/shadows (DC 13 STR), 1/rest.', tags:['control','melee']},
-    {id:'e18', type:'Equipment', name:'Mirror of Judgement', cost:7, desc:'Once per long rest, reflect a spell (≤3rd level) back at its caster.', tags:['reflect','counter']},
-    {id:'e19', type:'Equipment', name:'Mark of Chaos', cost:5,      desc:'When hit, roll d6: on 5–6, rebound half damage to attacker.', tags:['chaos','retaliate']},
-    {id:'b20', type:'Blessing',  name:'Oath of Eternity', cost:12,  desc:'Permanent divine favor: advantage on death saves; immune to magical aging.', tags:['death','eternity']}
-  ];
+  // INIT THEME/LANG ASAP
+  syncTheme(); syncLang();
 
-  window.__GOD_PACKS__ = {
-    'Tyr/Bahamut':[ {id:'t1', type:'Blessing', name:'Aegis of Law', cost:4, god:'Tyr/Bahamut', desc:'+2 AC vs the next attack this round; if it misses, you gain +1 FP.', tags:['law','shield']}, {id:'t2', type:'Equipment', name:'Sword of Verdict', cost:7, god:'Tyr/Bahamut', desc:'On hit, mark target "Judged" for 1 min; first ally attacking it gains advantage.', tags:['mark','ally']}, {id:'t3', type:'Blessing', name:'Merciful Edict', cost:3, god:'Tyr/Bahamut', desc:'Spare the Dying at 30 ft as bonus action; healed targets gain temp HP = level.', tags:['mercy','stabilize']}, {id:'t4', type:'Equipment', name:'Scales of Justice', cost:6, god:'Tyr/Bahamut', desc:'Once per rest, convert damage you take into temp HP for an ally (up to your level).', tags:['transfer','protect']} ],
-    'Raven Queen':[ {id:'r1', type:'Blessing', name:'Winter’s Claim', cost:4, god:'Raven Queen', desc:'Next hit chills the soul: speed halved and target cannot heal until your next turn.', tags:['chill','healing-block']}, {id:'r2', type:'Equipment', name:'Memory Shard', cost:6, god:'Raven Queen', desc:'Once per rest, learn one secret about a foe (resist, HP range, or weakness).', tags:['lore','reveal']}, {id:'r3', type:'Blessing', name:'Kiss of the Grave', cost:5, god:'Raven Queen', desc:'When you drop a creature to 0 HP, regain a spent spell slot (≤2nd) or 1 HD.', tags:['leech','slot']}, {id:'r4', type:'Equipment', name:'Crown of Ravens', cost:8, god:'Raven Queen', desc:'Spectral ravens harry enemies: start of their turn, DC 13 WIS or take 1d6 psychic.', tags:['aura','psychic']} ],
-    'Silvanus':[ {id:'s1', type:'Blessing', name:'Verdant Surge', cost:4, god:'Silvanus', desc:'Burst of vines heals allies in 10 ft for 1d6 and grants +2 temp HP.', tags:['heal','vines']}, {id:'s2', type:'Equipment', name:'Barkskin Mantle', cost:6, god:'Silvanus', desc:'Gain natural armor (AC 16 if not higher) for 10 minutes.', tags:['armor','nature']}, {id:'s3', type:'Blessing', name:'Thornbind', cost:5, god:'Silvanus', desc:'Root enemies: STR save DC 13 or restrained until damaged.', tags:['control','root']}, {id:'s4', type:'Equipment', name:'Seed of Ages', cost:7, god:'Silvanus', desc:'Plant a seed to create 10 ft cover grove for 1 minute; entering enemies are slowed.', tags:['terrain','slow']} ],
-    'Corellon':[ {id:'c1', type:'Blessing', name:'Muse’s Spark', cost:3, god:'Corellon', desc:'Reroll one CHA-based check; add +1d4.', tags:['inspire','cha']}, {id:'c2', type:'Equipment', name:'Lute of Starlight', cost:6, god:'Corellon', desc:'Perform 1 min to grant allies advantage on first save within next hour.', tags:['perform','buff']}, {id:'c3', type:'Blessing', name:'Steps of Freedom', cost:4, god:'Corellon', desc:'Ignore difficult terrain for 10 minutes; step on water briefly.', tags:['mobility','freedom']}, {id:'c4', type:'Equipment', name:'Mask of Many Gleams', cost:7, god:'Corellon', desc:'Disguise self at will for 1 hour.', tags:['disguise','trick']} ]
-  };
-
-  // App init
-  (function init(){
-    const sess = getSession();
-    if(sess){ session = sess; startApp(); }
-    else { loginScreen.style.display='flex'; }
-  })();
+  // Bootstrap app if session exists
+  (function init(){ const sess = getSession(); if(sess){ session = sess; startApp(); } else { loginScreen.style.display='flex'; } })();
 </script>
 </body>
 </html>
