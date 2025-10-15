@@ -1,71 +1,149 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Divine Interface — Modular (Phase 3)</title>
-  <link rel="stylesheet" href="css/style.css" />
-  <style>
-    :root{ --bg:#0b0f14; --panel:#121824; --text:#e6f0ff; --muted:#8aa1c9; --accent:#7dd3fc; }
-    [data-theme="light"]{ --bg:#f6f7fb; --panel:#ffffff; --text:#0d1b2a; --muted:#4a607f; --accent:#2563eb; }
-    *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto}
-    .container{max-width:1100px;margin:0 auto;padding:16px}
-    .panel{background:var(--panel);border:1px solid rgba(125,211,252,.25);border-radius:12px;padding:14px}
-    header{display:flex;align-items:center;justify-content:space-between;padding:12px 0}
-    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    .btn{all:unset;cursor:pointer;border:1px solid rgba(125,211,252,.4);padding:8px 10px;border-radius:10px;background:rgba(125,211,252,.08)}
-    input{padding:10px 12px;border-radius:10px;border:1px solid rgba(125,211,252,.25);background:rgba(2,6,23,.45);color:var(--text)}
-    [data-theme="light"] input{background:#f8fafc;border-color:#e5e7eb;color:#0f172a}
-    label{font-size:12px;opacity:.85}
-    .field{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
-    .hidden{display:none}
-  </style>
-</head>
-<body>
-  <div class="container">
-    <header>
-      <h1 id="title">Divine Interface</h1>
-      <div class="row">
-        <span id="userBadge" class="btn" title="user">—</span>
-        <button id="langBtn" class="btn">EN</button>
-        <button id="themeBtn" class="btn">🌗</button>
-        <button id="logoutBtn" class="btn hidden">Logout</button>
-      </div>
-    </header>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Divine Interface — Modular (Phase 3)</title>
+    <link rel="stylesheet" href="css/style.css" />
+    <style>
+      :root {
+        --bg: #0b0f14;
+        --panel: #121824;
+        --text: #e6f0ff;
+        --muted: #8aa1c9;
+        --accent: #7dd3fc;
+      }
+      [data-theme="light"] {
+        --bg: #f6f7fb;
+        --panel: #ffffff;
+        --text: #0d1b2a;
+        --muted: #4a607f;
+        --accent: #2563eb;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 16px/1.4 system-ui, -apple-system, Segoe UI, Roboto;
+      }
+      .container {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 16px;
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid rgba(125, 211, 252, 0.25);
+        border-radius: 12px;
+        padding: 14px;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 0;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .btn {
+        all: unset;
+        cursor: pointer;
+        border: 1px solid rgba(125, 211, 252, 0.4);
+        padding: 8px 10px;
+        border-radius: 10px;
+        background: rgba(125, 211, 252, 0.08);
+      }
+      input {
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid rgba(125, 211, 252, 0.25);
+        background: rgba(2, 6, 23, 0.45);
+        color: var(--text);
+      }
+      [data-theme="light"] input {
+        background: #f8fafc;
+        border-color: #e5e7eb;
+        color: #0f172a;
+      }
+      label {
+        font-size: 12px;
+        opacity: 0.85;
+      }
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-bottom: 10px;
+      }
+      .hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1 id="title">Divine Interface</h1>
+        <div class="row">
+          <span id="userBadge" class="btn" title="user">—</span>
+          <button id="langBtn" class="btn">EN</button>
+          <button id="themeBtn" class="btn">🌗</button>
+          <button id="logoutBtn" class="btn hidden">Logout</button>
+        </div>
+      </header>
 
-    <!-- Auth mount point (Admin Setup / Login) -->
-    <div id="authRoot" class="panel"></div>
+      <!-- Auth mount point (Admin Setup / Login) -->
+      <div id="authRoot" class="panel"></div>
+      <div id="app"></div>
 
-    <!-- App mount point (shown after login) -->
-    <div id="appRoot" class="panel hidden">
-      <h2 id="welcome"></h2>
-      <div class="row" style="margin:8px 0 12px">
-        <button class="btn" id="goStore">Store</button>
-        <button class="btn" id="goSheet">Character Sheet</button>
-        <button class="btn hidden" id="goAdmin">Admin</button>
+      <!-- App mount point (shown after login) -->
+      <div id="appRoot" class="panel hidden">
+        <h2 id="welcome"></h2>
+        <div class="row" style="margin: 8px 0 12px">
+          <button class="btn" id="goStore">Store</button>
+          <button class="btn" id="goSheet">Character Sheet</button>
+          <button class="btn hidden" id="goAdmin">Admin</button>
+        </div>
+        <div id="viewRoot"></div>
       </div>
-      <div id="viewRoot"></div>
     </div>
-  </div>
 
-  <!-- Supabase client + your project config -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-  <script defer>
-    // SAFE to expose: anon key + URL (use strict RLS policies)
-    window.SUPABASE = {
-      url: 'https://mwfahegdlmjnjuqdygmq.supabase.co',
-      anon: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13ZmFoZWdkbG1qbmp1cWR5Z21xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA0MjE5MTEsImV4cCI6MjA3NTk5NzkxMX0.57kVafRwL7e6BKv6cfP1VqJNMWLSqOQQNlVuiougu9E'
-    };
-  </script>
-  <script src="js/storage.supabase.js" defer></script>
+    <!-- Supabase client + your project config -->
+    <!-- Supabase client -->
+    <script
+      src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"
+      defer
+    ></script>
 
-  <!-- Scripts order matters: i18n → data → core → features -->
-  <script src="js/i18n.js" defer></script>
-  <script src="data/packs.js" defer></script>
-  <script src="js/core.js" defer></script>
-  <script src="js/store.js" defer></script>
-  <script src="js/sheet.js" defer></script>
-  <script src="js/admin.js" defer></script>
-</body>
+    <!-- Your Supabase project config (must be BEFORE any code that uses it) -->
+    <script defer>
+      window.SUPABASE = {
+        url: "https://mwfahegdlmjnjuqdygmq.supabase.co",
+        anon: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13ZmFoZWdkbG1qbmp1cWR5Z21xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA0MjE5MTEsImV4cCI6MjA3NTk5NzkxMX0.57kVafRwL7e6BKv6cfP1VqJNMWLSqOQQNlVuiougu9E",
+      };
+    </script>
+
+    <!-- (Optional) other Supabase helpers that use window.SUPABASE -->
+    <script src="js/storage.supabase.js" defer></script>
+
+    <!-- Provides window.CatalogAPI used by sheet.js -->
+    <script src="js/catalog.supabase.js" defer></script>
+
+    <!-- Character Sheet UI (mounts into #app) -->
+    <script src="js/sheet.js" defer></script>
+
+    <!-- Your other app scripts (optional) -->
+    <script src="js/i18n.js" defer></script>
+    <script src="data/packs.js" defer></script>
+    <script src="js/core.js" defer></script>
+    <script src="js/store.js" defer></script>
+    <script src="js/admin.js" defer></script>
+  </body>
 </html>
