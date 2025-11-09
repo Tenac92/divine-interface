@@ -181,6 +181,46 @@
         display: grid;
         gap: 0.35rem;
       }
+      .sheet-hero-summary {
+        display: grid;
+        gap: 8px;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      }
+      .sheet-hero-chip {
+        border: 1px solid rgba(125, 211, 252, 0.25);
+        border-radius: 12px;
+        padding: 0.45rem 0.65rem;
+        background: rgba(15, 23, 42, 0.4);
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+      }
+      .sheet-hero-chip .chip-label {
+        font-size: 0.65rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        opacity: 0.65;
+      }
+      .sheet-hero-chip strong {
+        font-size: 0.95rem;
+      }
+      .sheet-hero-grid {
+        display: grid;
+        gap: 8px;
+      }
+      .sheet-hero-grid .ui-field {
+        gap: 0.35rem;
+      }
+      .sheet-hero-grid .ui-input,
+      .sheet-hero-grid .ui-select,
+      .sheet-hero-grid .ui-static {
+        padding: 0.45rem 0.65rem;
+        border-radius: 10px;
+        font-size: 0.92rem;
+      }
+      .sheet-hero-grid .btn {
+        padding: 0.4rem 0.8rem;
+      }
       .sheet-hero-name {
         font-size: 1.35rem;
         font-weight: 700;
@@ -443,6 +483,9 @@
         .sheet-hero-header {
           text-align: center;
         }
+        .sheet-hero-summary {
+          grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        }
         .sheet-hero-name {
           font-size: 1.2rem;
         }
@@ -539,6 +582,18 @@
     <script src="storage.supabase.js"></script>
     <script src="storage.react.js"></script>
     <script src="catalog.react.js"></script>
+    <script src="sheet.constants.js"></script>
+    <script src="sheet.services.js"></script>
+    <script src="sheet.selectors.js"></script>
+    <script src="sheet.hooks.js"></script>
+    <script src="components/SheetOverview.js"></script>
+    <script src="components/SheetOverviewTabs.js"></script>
+    <script src="components/SheetCombat.js"></script>
+    <script src="components/SheetAbilities.js"></script>
+    <script src="components/SheetSkills.js"></script>
+    <script src="components/SheetInventory.js"></script>
+    <script src="components/SheetSpells.js"></script>
+    <script src="components/SheetNotes.js"></script>
     <script src="sheet.react.js"></script>
     <script src="admin.react.js"></script>
     <script src="store.react.js"></script>

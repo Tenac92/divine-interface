@@ -1,313 +1,60 @@
 (function () {
   const AppNS = (window.App = window.App || {});
-  const { useEffect, useMemo, useRef, useState } = React;
+  const { useEffect, useMemo, useState, useRef, useCallback } = React;
 
-  // ---------- Constants ----------
-  const XP_TABLE = {
-    1: 0,
-    2: 300,
-    3: 900,
-    4: 2700,
-    5: 6500,
-    6: 14000,
-    7: 23000,
-    8: 34000,
-    9: 48000,
-    10: 64000,
-    11: 85000,
-    12: 100000,
-    13: 120000,
-    14: 140000,
-    15: 165000,
-    16: 195000,
-    17: 225000,
-    18: 265000,
-    19: 305000,
-    20: 355000,
-  };
-
-  const ABILITIES = [
-    { key: "str", label: "Strength" },
-    { key: "dex", label: "Dexterity" },
-    { key: "con", label: "Constitution" },
-    { key: "int", label: "Intelligence" },
-    { key: "wis", label: "Wisdom" },
-    { key: "cha", label: "Charisma" },
-  ];
-
-  const SKILLS = [
-    { key: "acrobatics", label: "Acrobatics", ability: "Dex" },
-    { key: "animal", label: "Animal Handling", ability: "Wis" },
-    { key: "arcana", label: "Arcana", ability: "Int" },
-    { key: "athletics", label: "Athletics", ability: "Str" },
-    { key: "deception", label: "Deception", ability: "Cha" },
-    { key: "history", label: "History", ability: "Int" },
-    { key: "insight", label: "Insight", ability: "Wis" },
-    { key: "intimidation", label: "Intimidation", ability: "Cha" },
-    { key: "investigation", label: "Investigation", ability: "Int" },
-    { key: "medicine", label: "Medicine", ability: "Wis" },
-    { key: "nature", label: "Nature", ability: "Int" },
-    { key: "perception", label: "Perception", ability: "Wis" },
-    { key: "performance", label: "Performance", ability: "Cha" },
-    { key: "persuasion", label: "Persuasion", ability: "Cha" },
-    { key: "religion", label: "Religion", ability: "Int" },
-    { key: "sleight", label: "Sleight of Hand", ability: "Dex" },
-    { key: "stealth", label: "Stealth", ability: "Dex" },
-    { key: "survival", label: "Survival", ability: "Wis" },
-  ];
-
-  const SPELL_SCHOOLS = [
-    "Abjuration",
-    "Conjuration",
-    "Divination",
-    "Enchantment",
-    "Evocation",
-    "Illusion",
-    "Necromancy",
-    "Transmutation",
-  ];
-
-  const DEFAULT_CLASS_OPTIONS = [
-    "Barbarian",
-    "Bard",
-    "Cleric",
-    "Druid",
-    "Fighter",
-    "Monk",
-    "Paladin",
-    "Ranger",
-    "Rogue",
-    "Sorcerer",
-    "Warlock",
-    "Wizard",
-  ];
-
-  const DEFAULT_SPECIES_OPTIONS = [
-    "Aasimar",
-    "Dragonborn",
-    "Dwarf",
-    "Elf",
-    "Gnome",
-    "Half-Elf",
-    "Half-Orc",
-    "Halfling",
-    "Human",
-    "Tiefling",
-  ];
-
-  const cfg = window.RUNTIME_ENV || {};
-  const SUPABASE_URL = cfg.SUPABASE_URL || "";
-  const SUPABASE_ANON_KEY = cfg.SUPABASE_ANON_KEY || "";
-  const HAS_SUPABASE = !!(SUPABASE_URL && SUPABASE_ANON_KEY);
-
-  const HEADERS = () => ({
-    apikey: SUPABASE_ANON_KEY,
-    Authorization: "Bearer " + SUPABASE_ANON_KEY,
-  });
-
-  const buildURL = (table, params = {}) => {
-    const url = new URL(SUPABASE_URL + "/rest/v1/" + encodeURIComponent(table));
-    Object.entries(params).forEach(([key, value]) =>
-      url.searchParams.set(key, value)
+  if (!AppNS.SheetConstants || !AppNS.SheetServices) {
+    console.error(
+      "[Sheet] Missing dependencies. Ensure sheet.constants.js and sheet.services.js are loaded first."
     );
-    return url.toString();
+    return;
+  }
+
+  const {
+    ABILITIES,
+    SKILLS,
+    SKILL_ABILITY_MAP,
+    SPELL_SCHOOLS,
+    DEFAULT_CLASS_OPTIONS,
+    DEFAULT_SPECIES_OPTIONS,
+  } = AppNS.SheetConstants;
+
+  const {
+    HAS_SUPABASE,
+    fetchFaithItems,
+    randId,
+    getSessionSafe,
+    loadProfileAny,
+    saveProfileAny,
+    defaultSheet,
+    defaultProfile,
+    normalizeItems,
+    normalizeComponents,
+    normalizeSpells,
+    normalizeSpellSlots,
+    mergeSheet,
+    abilityMod,
+    levelToProficiency,
+    xpForLevel,
+    validateSheet,
+  } = AppNS.SheetServices;
+
+  const SheetSelectors = AppNS.SheetSelectors || {};
+  const HooksAPI = AppNS.SheetHooks || {};
+  const SheetComponents = AppNS.SheetComponents || {};
+  const OverviewComponent = SheetComponents.Overview;
+  const CombatComponent = SheetComponents.Combat;
+  const AbilitiesComponent = SheetComponents.Abilities;
+  const SkillsComponent = SheetComponents.Skills;
+  const InventoryComponent = SheetComponents.Inventory;
+  const SpellsComponent = SheetComponents.Spells;
+  const NotesComponent = SheetComponents.Notes;
+  const AUTOSAVE_DELAY_MS = 2500;
+  const MOBILE_NUMBER_PROPS = {
+    inputMode: "numeric",
+    pattern: "[0-9]*",
   };
-
-  async function fetchFaithItems({ search = "", limit = 300 } = {}) {
-    if (!HAS_SUPABASE) return [];
-    const params = {
-      select: "id,name,type,desc,cost,god,active,sort_index",
-      order: "sort_index.asc,name.asc",
-      limit: String(limit),
-      active: "eq.true",
-    };
-    if (search) params.name = `ilike.*${search}*`;
-    try {
-      const res = await fetch(buildURL("faith_items", params), {
-        headers: HEADERS(),
-      });
-      const data = await res.json().catch(() => []);
-      if (!res.ok || !Array.isArray(data)) return [];
-      return data;
-    } catch (err) {
-      console.warn("[Sheet] fetchFaithItems failed", err);
-      return [];
-    }
-  }
-
-  // ---------- Helpers ----------
-  const randId = () => Math.random().toString(36).slice(2, 10);
-
-  const hasCore = !!(window.Core && typeof window.Core.getSession === "function");
-  function getSessionSafe() {
-    if (hasCore) return window.Core.getSession();
-    return { username: "local-user", role: "player" };
-  }
-
-  const hasRemote = !!window.RemoteStore;
-  const LS_PROFILES = "di.store.profiles.v1";
-  function lsLoadProfiles() {
-    try {
-      return JSON.parse(localStorage.getItem(LS_PROFILES) || "{}");
-    } catch {
-      return {};
-    }
-  }
-  function lsSaveProfiles(map) {
-    localStorage.setItem(LS_PROFILES, JSON.stringify(map));
-  }
-  async function loadProfileAny(user) {
-    if (hasRemote) return (await window.RemoteStore.loadProfile(user)) || null;
-    const map = lsLoadProfiles();
-    return map[user] || null;
-  }
-  async function saveProfileAny(user, prof) {
-    if (hasRemote) return window.RemoteStore.saveProfile(user, prof);
-    const map = lsLoadProfiles();
-    map[user] = prof;
-    lsSaveProfiles(map);
-    return prof;
-  }
-
-  function defaultSheet(username) {
-    const skills = {};
-    SKILLS.forEach((s) => {
-      skills[s.key] = false;
-    });
-    return {
-      name: username || "",
-      className: "",
-      species: "",
-      background: "",
-      level: 1,
-      xp: 0,
-      inspiration: false,
-      ac: 10,
-      hp: { current: 10, max: 10, temp: 0 },
-      abilities: {
-        str: 10,
-        dex: 10,
-        con: 10,
-        int: 10,
-        wis: 10,
-        cha: 10,
-      },
-      skills,
-      inventory: [],
-      spells: [],
-      notes: "",
-      updatedAt: null,
-    };
-  }
-
-  function defaultProfile(username) {
-    return {
-      id: randId(),
-      name: username,
-      god: "Tyr/Bahamut",
-      level: 1,
-      fp: 10,
-      owned: [],
-      lock: false,
-      sheet: defaultSheet(username),
-    };
-  }
-
-  function normalizeItems(list) {
-    return (Array.isArray(list) ? list : []).map((item) => ({
-      id: item?.id || randId(),
-      name: item?.name || "",
-      qty: Number(item?.qty ?? 1) || 1,
-      note: item?.note || "",
-    }));
-  }
-
-  function normalizeComponents(value) {
-    if (Array.isArray(value)) {
-      return value.map((part) => String(part || "").trim()).filter(Boolean);
-    }
-    if (typeof value === "string" && value.trim()) {
-      return value
-        .split(/[,;/]+/)
-        .map((part) => part.trim())
-        .filter(Boolean);
-    }
-    return [];
-  }
-
-  function normalizeSpells(list) {
-    return (Array.isArray(list) ? list : []).map((spell) => ({
-      id: spell?.id || randId(),
-      name: spell?.name || "",
-      level: Number(spell?.level ?? 0) || 0,
-      prepared: !!spell?.prepared,
-      note: spell?.note || "",
-      castingTime: spell?.castingTime || spell?.casting_time || "",
-      range: spell?.range || "",
-      duration: spell?.duration || "",
-      school: spell?.school || "",
-      components: normalizeComponents(spell?.components),
-      materials: spell?.materials || "",
-      concentration: !!spell?.concentration,
-      ritual: !!spell?.ritual,
-      description: spell?.description || spell?.text_md || "",
-    }));
-  }
-
-  function mergeSheet(username, raw) {
-    const base = defaultSheet(username);
-    if (!raw) return base;
-    return {
-      ...base,
-      ...raw,
-      hp: { ...base.hp, ...(raw.hp || {}) },
-      abilities: { ...base.abilities, ...(raw.abilities || {}) },
-      skills: { ...base.skills, ...(raw.skills || {}) },
-      inventory: normalizeItems(raw.inventory),
-      spells: normalizeSpells(raw.spells),
-      updatedAt: raw.updatedAt || raw.updated_at || null,
-    };
-  }
-
-  function abilityMod(score) {
-    const n = Number(score) || 0;
-    return Math.floor((n - 10) / 2);
-  }
-
-  function levelToProficiency(level) {
-    const lvl = Math.min(Math.max(Number(level) || 1, 1), 20);
-    return 2 + Math.floor((lvl - 1) / 4);
-  }
-
-  function xpForLevel(level) {
-    return XP_TABLE[level] || XP_TABLE[20];
-  }
-
-  function validateSheet(state) {
-    const errs = [];
-    if (!state.name || !state.name.trim()) {
-      errs.push("Character name is required.");
-    }
-    const level = Number(state.level) || 1;
-    if (level < 1 || level > 20) {
-      errs.push("Level must stay between 1 and 20.");
-    }
-    if (state.ac < 1) {
-      errs.push("Armor class must be at least 1.");
-    }
-    Object.entries(state.abilities || {}).forEach(([key, value]) => {
-      const score = Number(value) || 0;
-      if (score < 1 || score > 30) {
-        errs.push(`${key.toUpperCase()} score should be between 1 and 30.`);
-      }
-    });
-    const current = Number(state.hp?.current ?? 0);
-    const max = Number(state.hp?.max ?? 0);
-    if (current < 0) errs.push("Current HP cannot be negative.");
-    if (max < 1) errs.push("Max HP must be at least 1.");
-    if (current > max) errs.push("Current HP cannot exceed Max HP.");
-    return errs;
-  }
+  const WEAPON_NAME_PATTERN =
+    /(sword|axe|bow|dagger|mace|spear|staff|hammer|crossbow|blade|whip|club|flail|halberd|pike|glaive|glive|polearm|lance|trident)/i;
 
   // ---------- UI helpers ----------
   const Card = ({ className = "", children, ...rest }) =>
@@ -334,6 +81,8 @@
         ? React.createElement("span", { className: "ui-hint" }, hint)
         : null
     );
+
+
 
   // ---------- Component ----------
   function SheetPage() {
@@ -368,17 +117,55 @@
       return window.matchMedia("(max-width: 768px)").matches;
     });
     const catalog = AppNS.Catalog || {};
-    const [classOptions, setClassOptions] = useState(DEFAULT_CLASS_OPTIONS);
-    const [speciesOptions, setSpeciesOptions] = useState(DEFAULT_SPECIES_OPTIONS);
+    const hasClassCatalog = typeof catalog.listClasses === "function";
+    const hasSpeciesCatalog = typeof catalog.listSpecies === "function";
+    const hasWeaponCatalog = typeof catalog.listWeapons === "function";
+    const hasSpellCatalog = typeof catalog.listSpells === "function";
+    const hasGearCatalog = hasWeaponCatalog || HAS_SUPABASE;
+    const useClassCatalogHook =
+      HooksAPI.useClassCatalog ||
+      function useClassCatalogFallback({ initial }) {
+        return initial;
+      };
+    const useSpeciesCatalogHook =
+      HooksAPI.useSpeciesCatalog ||
+      function useSpeciesCatalogFallback({ initial }) {
+        return initial;
+      };
+    const useStoreItemsHook =
+      HooksAPI.useStoreItems ||
+      function useStoreItemsFallback() {
+        return [];
+      };
+    const useWeaponCatalogHook =
+      HooksAPI.useWeaponCatalog ||
+      function useWeaponCatalogFallback() {
+        return { results: [], loading: false };
+      };
+    const useSpellCatalogHook =
+      HooksAPI.useSpellCatalog ||
+      function useSpellCatalogFallback() {
+        return { results: [], loading: false };
+      };
+
+    const classOptions = useClassCatalogHook({
+      catalog,
+      hasClassCatalog,
+      initial: DEFAULT_CLASS_OPTIONS,
+    });
+    const speciesOptions = useSpeciesCatalogHook({
+      catalog,
+      hasSpeciesCatalog,
+      initial: DEFAULT_SPECIES_OPTIONS,
+    });
     const [gearSearch, setGearSearch] = useState("");
-    const [weaponResults, setWeaponResults] = useState([]);
-    const [weaponLoading, setWeaponLoading] = useState(false);
-    const weaponFetchId = useRef(0);
-    const [storeItems, setStoreItems] = useState([]);
+    const [skillSearch, setSkillSearch] = useState("");
+    const [showHeroEditor, setShowHeroEditor] = useState(false);
+    const storeItems = useStoreItemsHook({
+      enabled: HAS_SUPABASE,
+      fetchFaithItems,
+    });
     const [spellSearch, setSpellSearch] = useState("");
-    const [spellResults, setSpellResults] = useState([]);
-    const [spellLoading, setSpellLoading] = useState(false);
-    const spellFetchId = useRef(0);
     const [spellFilterLevel, setSpellFilterLevel] = useState("all");
     const [spellFilterPrepared, setSpellFilterPrepared] = useState("any");
     const [spellCatalogClass, setSpellCatalogClass] = useState("auto");
@@ -391,12 +178,25 @@
     const [spellListSearch, setSpellListSearch] = useState("");
     const [collapsedSpellLevels, setCollapsedSpellLevels] = useState({});
     const [openSpellEditors, setOpenSpellEditors] = useState({});
+    const autosaveTimerRef = useRef(null);
 
-    const hasClassCatalog = typeof catalog.listClasses === "function";
-    const hasSpeciesCatalog = typeof catalog.listSpecies === "function";
-    const hasWeaponCatalog = typeof catalog.listWeapons === "function";
-    const hasSpellCatalog = typeof catalog.listSpells === "function";
-    const hasGearCatalog = hasWeaponCatalog || HAS_SUPABASE;
+    const { results: weaponResults, loading: weaponLoading } =
+      useWeaponCatalogHook({
+        catalog,
+        hasWeaponCatalog,
+        gearSearch,
+      });
+    const { results: spellResults, loading: spellLoading } = useSpellCatalogHook({
+      catalog,
+      hasSpellCatalog,
+      spellSearch,
+      spellCatalogClass,
+      spellCatalogLevel,
+      spellCatalogSchool,
+      spellCatalogRitual,
+      spellCatalogConcentration,
+      sheetClassName: sheet.className,
+    });
 
     useEffect(() => {
       if (typeof window === "undefined" || !window.matchMedia) return undefined;
@@ -428,76 +228,6 @@
     }, [sheet]);
 
     useEffect(() => {
-      if (!hasClassCatalog) return undefined;
-      let cancelled = false;
-      (async () => {
-        try {
-          const list = await catalog.listClasses({ limit: 200 });
-          if (
-            cancelled ||
-            !Array.isArray(list) ||
-            list.length === 0
-          )
-            return;
-          const normalized = Array.from(
-            new Set(
-              list
-                .map((entry) => (entry?.name || entry?.id || "").trim())
-                .filter(Boolean)
-            )
-          );
-          if (normalized.length) setClassOptions(normalized);
-        } catch (err) {
-          console.warn("[Sheet] load class catalog failed", err);
-        }
-      })();
-      return () => {
-        cancelled = true;
-      };
-    }, [catalog, hasClassCatalog]);
-
-    useEffect(() => {
-      if (!hasSpeciesCatalog) return undefined;
-      let cancelled = false;
-      (async () => {
-        try {
-          const list = await catalog.listSpecies({ limit: 200 });
-          if (
-            cancelled ||
-            !Array.isArray(list) ||
-            list.length === 0
-          )
-            return;
-          const normalized = Array.from(
-            new Set(
-              list
-                .map((entry) => (entry?.name || entry?.id || "").trim())
-                .filter(Boolean)
-            )
-          );
-          if (normalized.length) setSpeciesOptions(normalized);
-        } catch (err) {
-          console.warn("[Sheet] load species catalog failed", err);
-        }
-      })();
-      return () => {
-        cancelled = true;
-      };
-    }, [catalog, hasSpeciesCatalog]);
-
-    useEffect(() => {
-      if (!HAS_SUPABASE) return undefined;
-      let cancelled = false;
-      (async () => {
-        const data = await fetchFaithItems({ limit: 400 });
-        if (!cancelled && Array.isArray(data)) setStoreItems(data);
-      })();
-      return () => {
-        cancelled = true;
-      };
-    }, []);
-
-    useEffect(() => {
       let cancelled = false;
       (async () => {
         setLoading(true);
@@ -523,107 +253,6 @@
       };
     }, [session.username]);
 
-    useEffect(() => {
-      if (!hasWeaponCatalog) return undefined;
-      let alive = true;
-      const requestId = ++weaponFetchId.current;
-      setWeaponLoading(true);
-      const delay = gearSearch ? 250 : 30;
-      const handle = setTimeout(async () => {
-        try {
-          const list = await catalog.listWeapons({
-            search: gearSearch.trim(),
-            limit: 40,
-          });
-          if (alive && weaponFetchId.current === requestId) {
-            setWeaponResults(Array.isArray(list) ? list : []);
-          }
-        } catch (err) {
-          console.warn("[Sheet] weapon catalog lookup failed", err);
-          if (alive && weaponFetchId.current === requestId) {
-            setWeaponResults([]);
-          }
-        } finally {
-          if (alive && weaponFetchId.current === requestId) {
-            setWeaponLoading(false);
-          }
-        }
-      }, delay);
-      return () => {
-        alive = false;
-        clearTimeout(handle);
-      };
-    }, [catalog, gearSearch, hasWeaponCatalog]);
-
-    useEffect(() => {
-      if (!hasSpellCatalog) return undefined;
-      let alive = true;
-      const requestId = ++spellFetchId.current;
-      setSpellLoading(true);
-      const delay = spellSearch ? 250 : 30;
-      const effectiveClass =
-        spellCatalogClass === "auto"
-          ? sheet.className || ""
-          : spellCatalogClass === "any"
-          ? ""
-          : spellCatalogClass;
-      const levelFilter =
-        spellCatalogLevel === "all"
-          ? undefined
-          : Number(spellCatalogLevel) || 0;
-      const schoolFilter =
-        spellCatalogSchool === "any" ? "" : spellCatalogSchool;
-      const ritualFilter =
-        spellCatalogRitual === "any"
-          ? undefined
-          : spellCatalogRitual === "yes";
-      const concentrationFilter =
-        spellCatalogConcentration === "any"
-          ? undefined
-          : spellCatalogConcentration === "yes";
-      const handle = setTimeout(async () => {
-        try {
-          const list = await catalog.listSpells({
-            search: spellSearch.trim(),
-            limit: 60,
-            className: effectiveClass,
-            level:
-              typeof levelFilter === "number" && spellCatalogLevel !== "all"
-                ? levelFilter
-                : undefined,
-            school: schoolFilter,
-            ritual: ritualFilter,
-            concentration: concentrationFilter,
-          });
-          if (alive && spellFetchId.current === requestId) {
-            setSpellResults(Array.isArray(list) ? list : []);
-          }
-        } catch (err) {
-          console.warn("[Sheet] spell catalog lookup failed", err);
-          if (alive && spellFetchId.current === requestId) {
-            setSpellResults([]);
-          }
-        } finally {
-          if (alive && spellFetchId.current === requestId) {
-            setSpellLoading(false);
-          }
-        }
-      }, delay);
-      return () => {
-        alive = false;
-        clearTimeout(handle);
-      };
-    }, [
-      catalog,
-      hasSpellCatalog,
-      spellSearch,
-      spellCatalogClass,
-      spellCatalogLevel,
-      spellCatalogSchool,
-      spellCatalogRitual,
-      spellCatalogConcentration,
-      sheet.className,
-    ]);
 
     const updateSheet = (producer) => {
       setSheet((prev) => {
@@ -633,37 +262,64 @@
       });
     };
 
-    const saveChanges = async () => {
-      if (!profile) return;
-      setSaving(true);
-      try {
-        const nextSheet = {
-          ...sheet,
-          updatedAt: new Date().toISOString(),
-        };
-        const nextProfile = {
-          ...profile,
-          name: sheet.name || profile.name,
-          sheet: nextSheet,
-        };
-        await saveProfileAny(session.username, nextProfile);
-        setProfile(nextProfile);
-        setSheet(nextSheet);
-        setDirty(false);
-        AppNS.toast && AppNS.toast("Sheet saved.");
-      } catch (err) {
-        console.error("[Sheet] save failed", err);
-        AppNS.toast && AppNS.toast("Saving failed. Try again.");
-      } finally {
-        setSaving(false);
-      }
+    const handleAcChange = (value) => {
+      updateSheet((prev) => ({
+        ...prev,
+        ac: Math.max(1, Number(value) || 1),
+      }));
     };
 
-    const resetDraft = () => {
-      if (!profile) return;
-      setSheet(mergeSheet(session.username, profile.sheet));
-      setDirty(false);
+    const handleHpFieldChange = (field, value) => {
+      updateSheet((prev) => {
+        const numeric = Number(value);
+        const nextValue =
+          field === "max"
+            ? Math.max(1, numeric || 1)
+            : Math.max(0, numeric || 0);
+        return {
+          ...prev,
+          hp: {
+            ...prev.hp,
+            [field]: nextValue,
+          },
+        };
+      });
     };
+
+    const saveChanges = useCallback(
+      async (options = {}) => {
+        if (!profile) return;
+        const { silent = false } = options;
+        setSaving(true);
+        try {
+          const nextSheet = {
+            ...sheet,
+            updatedAt: new Date().toISOString(),
+          };
+          const nextProfile = {
+            ...profile,
+            name: sheet.name || profile.name,
+            sheet: nextSheet,
+          };
+          await saveProfileAny(session.username, nextProfile);
+          setProfile(nextProfile);
+          setSheet(nextSheet);
+          setDirty(false);
+          if (!silent) {
+            AppNS.toast && AppNS.toast("Sheet saved.");
+          }
+        } catch (err) {
+          console.error("[Sheet] save failed", err);
+          const message = silent
+            ? "Autosave failed. Please save manually."
+            : "Saving failed. Try again.";
+          AppNS.toast && AppNS.toast(message);
+        } finally {
+          setSaving(false);
+        }
+      },
+      [profile, sheet, session.username]
+    );
 
     const gridCols = (desktopPattern) =>
       isCompact ? "1fr" : desktopPattern;
@@ -689,6 +345,9 @@
 
     const proficiency = levelToProficiency(sheet.level);
     const abilityMods = useMemo(() => {
+      if (SheetSelectors.selectAbilityMods) {
+        return SheetSelectors.selectAbilityMods(sheet.abilities);
+      }
       const mods = {};
       ABILITIES.forEach(({ key }) => {
         mods[key] = abilityMod(sheet.abilities?.[key] ?? 10);
@@ -696,13 +355,96 @@
       return mods;
     }, [sheet.abilities]);
 
-    const xpFloor = xpForLevel(sheet.level);
-    const xpCeil = xpForLevel(Math.min((sheet.level || 1) + 1, 20));
-    const xpRange = Math.max(xpCeil - xpFloor, 1);
-    const xpProgress = Math.max(
-      0,
-      Math.min(1, (sheet.xp - xpFloor) / xpRange)
+    const handleAbilityChange = (key, value) =>
+      updateSheet((prev) => ({
+        ...prev,
+        abilities: {
+          ...prev.abilities,
+          [key]: Number(value) || 0,
+        },
+      }));
+
+    const spellSlots = useMemo(
+      () =>
+        SheetSelectors.selectSpellSlots
+          ? SheetSelectors.selectSpellSlots(sheet.spellSlots)
+          : normalizeSpellSlots(sheet.spellSlots),
+      [sheet.spellSlots]
     );
+
+    const getSkillAbilityKey = (skill) =>
+      SKILL_ABILITY_MAP[skill.ability] || skill.ability?.toLowerCase?.() || "dex";
+
+    const getSkillBonus = (skill) => {
+      if (!skill) return 0;
+      const abilityKey = getSkillAbilityKey(skill);
+      const base = abilityMods[abilityKey] || 0;
+      const trained = !!sheet.skills?.[skill.key];
+      return base + (trained ? proficiency : 0);
+    };
+
+    const formatBonus = (value) => (value >= 0 ? `+${value}` : `${value}`);
+
+    const filteredSkillList = useMemo(() => {
+      if (SheetSelectors.selectFilteredSkills) {
+        return SheetSelectors.selectFilteredSkills(skillSearch);
+      }
+      const terms = skillSearch
+        .trim()
+        .toLowerCase()
+        .split(/\s+/)
+        .filter(Boolean);
+      if (!terms.length) return SKILLS;
+      return SKILLS.filter((skill) => {
+        const haystack = [skill.label, skill.ability]
+          .map((val) => (val || "").toLowerCase())
+          .join(" ");
+        return terms.every((term) => haystack.includes(term));
+      });
+    }, [skillSearch]);
+
+    const skillsByAbility = useMemo(() => {
+      if (SheetSelectors.selectSkillsByAbility) {
+        return SheetSelectors.selectSkillsByAbility(filteredSkillList);
+      }
+      const map = new Map();
+      filteredSkillList.forEach((skill) => {
+        const abilityKey = getSkillAbilityKey(skill);
+        if (!map.has(abilityKey)) map.set(abilityKey, []);
+        map.get(abilityKey).push(skill);
+      });
+      return map;
+    }, [filteredSkillList]);
+
+    const passiveScore = (skillKey) => {
+      const skill = SKILLS.find((s) => s.key === skillKey);
+      if (!skill) return null;
+      return 10 + getSkillBonus(skill);
+    };
+
+    const skillSummary = useMemo(() => {
+      if (SheetSelectors.selectSkillSummary) {
+        return SheetSelectors.selectSkillSummary(sheet, abilityMods, proficiency);
+      }
+      const best = SKILLS.reduce(
+        (acc, skill) => {
+          const bonus = getSkillBonus(skill);
+          if (!acc || bonus > acc.bonus) return { skill, bonus };
+          return acc;
+        },
+        null
+      );
+      return {
+        proficientCount: Object.values(sheet.skills || {}).filter(Boolean).length,
+        bestSkill: best,
+        passivePerception: passiveScore("perception"),
+        passiveInvestigation: passiveScore("investigation"),
+        passiveInsight: passiveScore("insight"),
+      };
+    }, [sheet.skills, abilityMods, proficiency]);
+
+
+    const xpCeil = xpForLevel(Math.min((sheet.level || 1) + 1, 20));
     const spellLevelOptions = useMemo(() => {
       const levels = new Set([0]);
       (Array.isArray(sheet.spells) ? sheet.spells : []).forEach((spell) => {
@@ -775,6 +517,31 @@
       });
       return Array.from(map.entries()).sort((a, b) => a[0] - b[0]);
     }, [filteredSpells]);
+    const preparedSpells = useMemo(
+      () =>
+        SheetSelectors.selectPreparedSpells
+          ? SheetSelectors.selectPreparedSpells(sortedSpells)
+          : sortedSpells.filter((spell) => spell.prepared),
+      [sortedSpells]
+    );
+    const preparedSpellsByLevel = useMemo(
+      () =>
+        SheetSelectors.selectPreparedSpellsByLevel
+          ? SheetSelectors.selectPreparedSpellsByLevel(preparedSpells)
+          : (() => {
+              const map = new Map();
+              preparedSpells.forEach((spell) => {
+                const lvl = Number(spell.level ?? 0);
+                const key = Number.isFinite(lvl)
+                  ? Math.max(0, Math.min(9, lvl))
+                  : 0;
+                if (!map.has(key)) map.set(key, []);
+                map.get(key).push(spell);
+              });
+              return map;
+            })(),
+      [preparedSpells]
+    );
     const knownSpellNames = useMemo(
       () =>
         new Set(
@@ -783,6 +550,20 @@
           )
         ),
       [sheet.spells]
+    );
+    const inventoryHighlights = useMemo(
+      () =>
+        SheetSelectors.selectInventoryHighlights
+          ? SheetSelectors.selectInventoryHighlights(sheet.inventory, 4)
+          : (Array.isArray(sheet.inventory) ? sheet.inventory : []).slice(0, 4),
+      [sheet.inventory]
+    );
+    const notesPreview = useMemo(
+      () =>
+        SheetSelectors.selectNotesPreview
+          ? SheetSelectors.selectNotesPreview(sheet.notes)
+          : (sheet.notes || "").trim(),
+      [sheet.notes]
     );
     const weaponSuggestions = useMemo(() => {
       if (!hasWeaponCatalog) return [];
@@ -804,6 +585,14 @@
         })
         .slice(0, 10);
     }, [gearSearch, storeItems]);
+    const weaponItems = useMemo(() => {
+      const list = Array.isArray(sheet.inventory) ? sheet.inventory : [];
+      return list.filter((item) => {
+        const name = item?.name || "";
+        const note = (item?.note || "").toLowerCase();
+        return WEAPON_NAME_PATTERN.test(name) || note.includes("damage");
+      });
+    }, [sheet.inventory]);
     const spellSuggestions = useMemo(() => {
       if (!hasSpellCatalog || !spellResults.length) return [];
       const seen = new Set();
@@ -1144,6 +933,76 @@
         },
       }));
 
+    const updateSpellSlot = (level, patch) =>
+      updateSheet((prev) => {
+        const slots = normalizeSpellSlots(prev.spellSlots);
+        const target = slots[level] || { total: 0, used: 0 };
+        const next = { ...target, ...patch };
+        next.total = Math.max(0, Number(next.total) || 0);
+        next.used = Math.max(0, Math.min(Number(next.used) || 0, next.total));
+        slots[level] = next;
+        return { ...prev, spellSlots: slots };
+      });
+
+    const setSpellSlotTotal = (level, total) => {
+      const numeric = Math.max(0, Number(total) || 0);
+      updateSpellSlot(level, { total: numeric });
+    };
+
+    const spendSpellSlot = (level) => {
+      const slot = spellSlots[level];
+      if (!slot) return;
+      if (level === 0) {
+        AppNS.toast && AppNS.toast("Cantrips do not require spell slots.");
+        return;
+      }
+      if (slot.total <= 0) {
+        AppNS.toast &&
+          AppNS.toast(`Set slots for ${levelLabel(level)} before tracking usage.`);
+        return;
+      }
+      if (slot.used >= slot.total) {
+        AppNS.toast && AppNS.toast("All slots for this level are already spent.");
+        return;
+      }
+      updateSpellSlot(level, { used: slot.used + 1 });
+    };
+
+    const refundSpellSlot = (level) => {
+      const slot = spellSlots[level];
+      if (!slot || slot.used <= 0) return;
+      updateSpellSlot(level, { used: slot.used - 1 });
+    };
+
+    const resetSpellSlotUsage = (level) => updateSpellSlot(level, { used: 0 });
+
+    const handlePreparedSpellClick = (spell) => {
+      const lvl = Number(spell.level ?? 0);
+      const level = Number.isFinite(lvl) ? Math.max(0, Math.min(9, lvl)) : 0;
+      spendSpellSlot(level);
+    };
+
+    const canSave = dirty && !saving && errors.length === 0;
+
+    useEffect(() => {
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
+      if (!profile || !canSave) return undefined;
+      const handle = setTimeout(() => {
+        autosaveTimerRef.current = null;
+        saveChanges({ silent: true });
+      }, AUTOSAVE_DELAY_MS);
+      autosaveTimerRef.current = handle;
+      return () => {
+        if (autosaveTimerRef.current) {
+          clearTimeout(autosaveTimerRef.current);
+          autosaveTimerRef.current = null;
+        }
+      };
+    }, [profile, canSave, saveChanges]);
+
     if (loading) {
       return React.createElement(
         "div",
@@ -1152,7 +1011,6 @@
       );
     }
 
-    const canSave = dirty && !saving && errors.length === 0;
     const savedAtLabel = sheet.updatedAt
       ? `Last saved ${new Date(sheet.updatedAt).toLocaleString()}`
       : null;
@@ -1188,6 +1046,57 @@
             ),
           });
 
+    const preparedSpellLevels = Array.from(
+      new Set([
+        ...preparedSpellsByLevel.keys(),
+        ...spellSlots
+          .map((slot, lvl) => ({ lvl, slot }))
+          .filter(({ slot }) => slot.total > 0)
+          .map(({ lvl }) => lvl),
+      ])
+    ).filter((lvl) => lvl >= 0 && lvl <= 9);
+    const overviewTab = OverviewComponent
+      ? React.createElement(OverviewComponent, {
+          Card,
+          gridCols,
+          ABILITIES,
+          formatBonus,
+          sheet,
+          xpCeil,
+          abilityMods,
+          skillSummary,
+          inventoryHighlights,
+          inventoryCount,
+          notesPreview,
+        })
+      : Card({
+          children: React.createElement(
+            "div",
+            { className: "ui-hint" },
+            "Overview unavailable"
+          ),
+        });
+    const heroChipData = [
+      { label: "Class", value: sheet.className || "Unset" },
+      { label: "Species", value: sheet.species || "Unset" },
+      { label: "Background", value: sheet.background || "Unset" },
+      {
+        label: "Inspiration",
+        value: sheet.inspiration ? "Inspired" : "Not inspired",
+      },
+      { label: "Proficiency", value: `+${proficiency}` },
+    ];
+    const autosaveStatus = savedAtLabel
+      ? React.createElement(
+          "div",
+          {
+            className: "ui-hint",
+            style: { textAlign: "right" },
+          },
+          savedAtLabel
+        )
+      : null;
+
     const heroCard = Card({
       className: "sheet-hero grid gap-4",
       children: React.createElement(
@@ -1207,497 +1116,315 @@
             heroMetaInfo.hasOptionalDetails
               ? heroMetaInfo.line
               : "Complete the basics below to define your legend."
-          )
-        ),
-        React.createElement(
-          "div",
-          {
-            style: {
-              display: "grid",
-              gap: 12,
-              gridTemplateColumns: gridCols(
-                "repeat(auto-fit, minmax(180px, 1fr))"
-              ),
-            },
-          },
-          Field({
-            label: "Character Name",
-            children: React.createElement("input", {
-              className: "ui-input",
-              value: sheet.name,
-              onChange: (e) =>
-                updateSheet((prev) => ({ ...prev, name: e.target.value })),
-              placeholder: "Tyrion Shadeheart",
-            }),
-          }),
-          Field({
-            label: "Class",
-            children: React.createElement(
-              "select",
-              {
-                className: "ui-select",
-                value: sheet.className || "",
-                onChange: (e) =>
-                  updateSheet((prev) => ({
-                    ...prev,
-                    className: e.target.value,
-                  })),
-              },
-              [
-                React.createElement(
-                  "option",
-                  { key: "blank", value: "" },
-                  "Select class"
-                ),
-                ...classOptions.map((opt) =>
-                  React.createElement("option", { key: opt, value: opt }, opt)
-                ),
-              ]
-            ),
-          }),
-          Field({
-            label: "Species",
-            children: React.createElement(
-              "select",
-              {
-                className: "ui-select",
-                value: sheet.species || "",
-                onChange: (e) =>
-                  updateSheet((prev) => ({
-                    ...prev,
-                    species: e.target.value,
-                  })),
-              },
-              [
-                React.createElement(
-                  "option",
-                  { key: "blank", value: "" },
-                  "Select lineage"
-                ),
-                ...speciesOptions.map((opt) =>
-                  React.createElement("option", { key: opt, value: opt }, opt)
-                ),
-              ]
-            ),
-          }),
-          Field({
-            label: "Background",
-            children: React.createElement("input", {
-              className: "ui-input",
-              value: sheet.background || "",
-              onChange: (e) =>
-                updateSheet((prev) => ({
-                  ...prev,
-                  background: e.target.value,
-                })),
-              placeholder: "Haunted One",
-            }),
-          })
-        ),
-        React.createElement(
-          "div",
-          {
-            style: {
-              display: "grid",
-              gap: 12,
-              gridTemplateColumns: gridCols(
-                "repeat(auto-fit, minmax(140px, 1fr))"
-              ),
-            },
-          },
-          Field({
-            label: "Level",
-            hint: "Adjusting level updates proficiency",
-            children: React.createElement("input", {
-              className: "ui-input",
-              type: "number",
-              min: 1,
-              max: 20,
-              value: sheet.level,
-              onChange: (e) => {
-                const lvl = Math.max(
-                  1,
-                  Math.min(20, Number(e.target.value) || 1)
-                );
-                updateSheet((prev) => ({
-                  ...prev,
-                  level: lvl,
-                }));
-              },
-            }),
-          }),
-          Field({
-            label: "Proficiency",
-            children: React.createElement(
-              "div",
-              { className: "ui-static", style: { fontWeight: 600 } },
-              React.createElement("span", null, `+${proficiency}`),
-              React.createElement(
-                "span",
-                { className: "ui-hint", style: { textTransform: "none" } },
-                "Auto-calculated"
-              )
-            ),
-          }),
-          Field({
-            label: "Armor Class",
-            children: React.createElement("input", {
-              className: "ui-input",
-              type: "number",
-              min: 1,
-              value: sheet.ac,
-              onChange: (e) =>
-                updateSheet((prev) => ({
-                  ...prev,
-                  ac: Math.max(1, Number(e.target.value) || 1),
-                })),
-            }),
-          }),
-          Field({
-            label: "Inspiration",
-            children: React.createElement(
-              Btn,
-              {
-                type: "button",
-                className: sheet.inspiration ? "tab-btn-active" : "",
-                onClick: () =>
-                  updateSheet((prev) => ({
-                    ...prev,
-                    inspiration: !prev.inspiration,
-                  })),
-              },
-              sheet.inspiration ? "Inspired" : "Not inspired"
-            ),
-          })
-        ),
-        React.createElement(
-          "div",
-          {
-            style: {
-              display: "grid",
-              gap: 12,
-              gridTemplateColumns: gridCols(
-                "repeat(auto-fit, minmax(160px, 1fr))"
-              ),
-            },
-          },
-          Field({
-            label: "Max HP",
-            children: React.createElement("input", {
-              className: "ui-input",
-              type: "number",
-              min: 1,
-              value: sheet.hp?.max ?? 0,
-              onChange: (e) =>
-                updateSheet((prev) => ({
-                  ...prev,
-                  hp: {
-                    ...prev.hp,
-                    max: Math.max(1, Number(e.target.value) || 1),
-                  },
-                })),
-            }),
-          }),
-          Field({
-            label: "Current HP",
-            children: React.createElement("input", {
-              className: "ui-input",
-              type: "number",
-              value: sheet.hp?.current ?? 0,
-              onChange: (e) =>
-                updateSheet((prev) => ({
-                  ...prev,
-                  hp: {
-                    ...prev.hp,
-                    current: Number(e.target.value) || 0,
-                  },
-                })),
-            }),
-          }),
-          Field({
-            label: "Temp HP",
-            children: React.createElement("input", {
-              className: "ui-input",
-              type: "number",
-              value: sheet.hp?.temp ?? 0,
-              onChange: (e) =>
-                updateSheet((prev) => ({
-                  ...prev,
-                  hp: {
-                    ...prev.hp,
-                    temp: Number(e.target.value) || 0,
-                  },
-                })),
-            }),
-          })
-        ),
-        Field({
-          label: "Experience",
-          hint: `Next level at ${xpCeil.toLocaleString()} XP`,
-          children: React.createElement(
-            "div",
-            { className: "grid gap-2" },
-            React.createElement("input", {
-              className: "ui-input",
-              type: "number",
-              min: 0,
-              value: sheet.xp,
-              onChange: (e) =>
-                updateSheet((prev) => ({
-                  ...prev,
-                  xp: Math.max(0, Number(e.target.value) || 0),
-                })),
-            }),
-            React.createElement(
-              "div",
-              {
-                style: {
-                  position: "relative",
-                  height: 10,
-                  borderRadius: 999,
-                  background: "rgba(125, 211, 252, 0.12)",
-                  overflow: "hidden",
-                },
-              },
-              React.createElement("div", {
-                style: {
-                  width: `${Math.round(xpProgress * 100)}%`,
-                  height: "100%",
-                  background: "rgba(125, 211, 252, 0.65)",
-                },
-              })
-            )
           ),
-        })
-      ),
-    });
-
-    const actionBar = React.createElement(
-      "div",
-      { className: "sheet-action-footer" },
-      React.createElement(
-        Btn,
-        {
-          type: "button",
-          onClick: saveChanges,
-          disabled: !canSave,
-          className: dirty ? "btn-primary" : "",
-        },
-        saving ? "Saving..." : "Save changes"
-      ),
-      React.createElement(
-        Btn,
-        {
-          type: "button",
-          onClick: resetDraft,
-          disabled: !dirty || saving,
-          className: "btn-muted",
-        },
-        "Reset"
-      ),
-      savedAtLabel &&
+          Btn({
+            type: "button",
+            className: "btn-muted",
+            onClick: () => setShowHeroEditor((prev) => !prev),
+            children: showHeroEditor ? "Hide editor" : "Edit basics",
+          })
+        ),
         React.createElement(
-          "span",
-          { className: "sheet-action-timestamp" },
-          savedAtLabel
-        )
-    );
-
-    const overviewTab = React.createElement(
-      "div",
-      { className: "grid gap-3" },
-      Card({
-        children: React.createElement(
           "div",
-          {
-            style: {
-              display: "grid",
-              gap: 12,
-              gridTemplateColumns: gridCols(
-                "repeat(auto-fit, minmax(160px, 1fr))"
-              ),
-            },
-          },
-          [
-            ["Armor Class", sheet.ac],
-            ["HP", `${sheet.hp.current ?? 0}/${sheet.hp.max ?? 0}`],
-            ["Temp HP", sheet.hp.temp ?? 0],
-            ["Inspiration", sheet.inspiration ? "Yes" : "No"],
-            ["XP", sheet.xp.toLocaleString()],
-            ["Next Level", xpCeil.toLocaleString()],
-          ].map(([label, value]) =>
+          { className: "sheet-hero-summary" },
+          heroChipData.map((chip) =>
             React.createElement(
               "div",
-              {
-                key: label,
-                style: {
-                  display: "grid",
-                  gap: 4,
-                  padding: "0.65rem",
-                  borderRadius: 12,
-                  border: "1px solid rgba(125, 211, 252, 0.2)",
-                },
-              },
-              React.createElement("span", { className: "ui-label" }, label),
-              React.createElement(
-                "span",
-                { style: { fontWeight: 600, fontSize: "1.1rem" } },
-                value
-              )
+              { key: chip.label, className: "sheet-hero-chip" },
+              React.createElement("span", { className: "chip-label" }, chip.label),
+              React.createElement("strong", null, chip.value)
             )
           )
         ),
-      }),
-      Card({
-        children: React.createElement(
-        "div",
-        {
-          style: {
-            display: "grid",
-            gap: 12,
-            gridTemplateColumns: gridCols(
-              "repeat(auto-fit, minmax(140px, 1fr))"
-            ),
-          },
-        },
-          ABILITIES.map(({ key, label }) => {
-            const score = sheet.abilities?.[key] ?? 10;
-            const mod = abilityMods[key];
-            return React.createElement(
-              "div",
-              {
-                key: key,
-                style: {
-                  border: "1px solid rgba(125,211,252,0.2)",
-                  borderRadius: 12,
-                  padding: "0.75rem",
-                  display: "grid",
-                  gap: 6,
-                  textAlign: "center",
+        showHeroEditor
+          ? React.createElement(
+              React.Fragment,
+              null,
+              React.createElement(
+                "div",
+                {
+                  className: "sheet-hero-grid",
+                  style: {
+                    gridTemplateColumns: gridCols(
+                      "repeat(auto-fit, minmax(150px, 1fr))"
+                    ),
+                  },
                 },
-              },
-              React.createElement(
-                "div",
-                { className: "ui-label", style: { textTransform: "uppercase" } },
-                label
-              ),
-              React.createElement(
-                "div",
-                { style: { fontSize: 28, fontWeight: 700 } },
-                score
+                Field({
+                  label: "Character Name",
+                  children: React.createElement("input", {
+                    className: "ui-input",
+                    value: sheet.name,
+                    onChange: (e) =>
+                      updateSheet((prev) => ({ ...prev, name: e.target.value })),
+                    placeholder: "Tyrion Shadeheart",
+                  }),
+                }),
+                Field({
+                  label: "Class",
+                  children: React.createElement(
+                    "select",
+                    {
+                      className: "ui-select",
+                      value: sheet.className || "",
+                      onChange: (e) =>
+                        updateSheet((prev) => ({
+                          ...prev,
+                          className: e.target.value,
+                        })),
+                    },
+                    [
+                      React.createElement(
+                        "option",
+                        { key: "blank", value: "" },
+                        "Select class"
+                      ),
+                      ...classOptions.map((opt) =>
+                        React.createElement("option", { key: opt, value: opt }, opt)
+                      ),
+                    ]
+                  ),
+                }),
+                Field({
+                  label: "Species",
+                  children: React.createElement(
+                    "select",
+                    {
+                      className: "ui-select",
+                      value: sheet.species || "",
+                      onChange: (e) =>
+                        updateSheet((prev) => ({
+                          ...prev,
+                          species: e.target.value,
+                        })),
+                    },
+                    [
+                      React.createElement(
+                        "option",
+                        { key: "blank", value: "" },
+                        "Select lineage"
+                      ),
+                      ...speciesOptions.map((opt) =>
+                        React.createElement("option", { key: opt, value: opt }, opt)
+                      ),
+                    ]
+                  ),
+                }),
+                Field({
+                  label: "Background",
+                  children: React.createElement("input", {
+                    className: "ui-input",
+                    value: sheet.background || "",
+                    onChange: (e) =>
+                      updateSheet((prev) => ({
+                        ...prev,
+                        background: e.target.value,
+                      })),
+                    placeholder: "Haunted One",
+                  }),
+                })
               ),
               React.createElement(
                 "div",
                 {
-                  className: "tag",
-                  style: { justifyContent: "center", margin: "0 auto" },
-                },
-                mod >= 0 ? `+${mod}` : mod
-              )
-            );
-          })
-        ),
-      })
-    );
-
-    const abilitiesTab = Card({
-      children: React.createElement(
-        "div",
-        {
-          style: {
-            display: "grid",
-            gap: 12,
-            gridTemplateColumns: gridCols(
-              "repeat(auto-fit, minmax(160px, 1fr))"
-            ),
-          },
-        },
-        ABILITIES.map(({ key, label }) => {
-          const score = sheet.abilities?.[key] ?? 10;
-          const mod = abilityMods[key];
-          return React.createElement(
-            "div",
-            {
-              key: key,
-              style: {
-                border: "1px solid rgba(125,211,252,0.2)",
-                borderRadius: 12,
-                padding: "0.75rem",
-                display: "grid",
-                gap: 6,
-              },
-            },
-            React.createElement(
-              "div",
-              { className: "ui-label", style: { textTransform: "uppercase" } },
-              label
-            ),
-            React.createElement(
-              "div",
-              { style: { fontSize: 24, fontWeight: 700 } },
-              score
-            ),
-            React.createElement(
-              "div",
-              { className: "ui-hint" },
-              `Modifier ${mod >= 0 ? "+" : ""}${mod}`
-            ),
-            React.createElement("input", {
-              className: "ui-input",
-              type: "number",
-              min: 1,
-              max: 30,
-              value: score,
-              onChange: (e) =>
-                updateSheet((prev) => ({
-                  ...prev,
-                  abilities: {
-                    ...prev.abilities,
-                    [key]: Number(e.target.value) || 0,
+                  className: "sheet-hero-grid",
+                  style: {
+                    gridTemplateColumns: gridCols(
+                      "repeat(auto-fit, minmax(150px, 1fr))"
+                    ),
                   },
-                })),
-            })
-          );
-        })
-      ),
-    });
-
-    const skillsTab = Card({
-      children: React.createElement(
-        "div",
-        {
-          style: {
-            display: "grid",
-            gap: 8,
-            gridTemplateColumns: gridCols(
-              "repeat(auto-fit, minmax(160px, 1fr))"
-            ),
-          },
-        },
-        SKILLS.map((skill) =>
-          React.createElement(
-            "button",
-            {
-              key: skill.key,
-              type: "button",
-              className: sheet.skills?.[skill.key] ? "tab-btn-active" : "",
-              style: {
-                justifyContent: "space-between",
-                display: "flex",
-                width: isCompact ? "100%" : undefined,
-              },
-              onClick: () => toggleSkill(skill.key),
-            },
-            React.createElement("span", null, skill.label),
-            React.createElement(
-              "span",
-              { className: "ui-hint", style: { textTransform: "none" } },
-              skill.ability
+                },
+                Field({
+                  label: "Level",
+                  hint: "Adjusting level updates proficiency",
+                  children: React.createElement(
+                    "input",
+                    Object.assign(
+                      {
+                        className: "ui-input",
+                        type: "number",
+                        min: 1,
+                        max: 20,
+                        value: sheet.level,
+                        onChange: (e) => {
+                          const lvl = Math.max(
+                            1,
+                            Math.min(20, Number(e.target.value) || 1)
+                          );
+                          updateSheet((prev) => ({
+                            ...prev,
+                            level: lvl,
+                          }));
+                        },
+                      },
+                      MOBILE_NUMBER_PROPS
+                    )
+                  ),
+                }),
+                Field({
+                  label: "Proficiency",
+                  children: React.createElement(
+                    "div",
+                    { className: "ui-static", style: { fontWeight: 600 } },
+                    React.createElement("span", null, `+${proficiency}`),
+                    React.createElement(
+                      "span",
+                      { className: "ui-hint", style: { textTransform: "none" } },
+                      "Auto-calculated"
+                    )
+                  ),
+                }),
+                Field({
+                  label: "Inspiration",
+                  children: React.createElement(
+                    Btn,
+                    {
+                      type: "button",
+                      className: sheet.inspiration ? "tab-btn-active" : "",
+                      onClick: () =>
+                        updateSheet((prev) => ({
+                          ...prev,
+                          inspiration: !prev.inspiration,
+                        })),
+                    },
+                    sheet.inspiration ? "Inspired" : "Not inspired"
+                  ),
+                })
+              )
             )
+          : null
+      ),
+    });    const combatTab = CombatComponent
+      ? React.createElement(CombatComponent, {
+          Card,
+          Field,
+          Btn,
+          gridCols,
+          sheet,
+          abilityMods,
+          proficiency,
+          onAcChange: handleAcChange,
+          onHpChange: handleHpFieldChange,
+          preparedSpellLevels,
+          preparedSpellsByLevel,
+          spellSlots,
+          levelLabel,
+          onSpellSlotTotalChange: setSpellSlotTotal,
+          onRefundSpellSlot: refundSpellSlot,
+          onResetSpellSlot: resetSpellSlotUsage,
+          onPreparedSpellClick: handlePreparedSpellClick,
+          weaponItems,
+        })
+      : Card({
+          children: React.createElement(
+            "div",
+            { className: "ui-hint" },
+            "Combat view unavailable"
+          ),
+        });
+
+    const abilitiesTab = AbilitiesComponent
+      ? React.createElement(AbilitiesComponent, {
+          Card,
+          gridCols,
+          ABILITIES,
+          abilities: sheet.abilities,
+          abilityMods,
+          onAbilityChange: handleAbilityChange,
+        })
+      : Card({
+          children: React.createElement(
+            "div",
+            { className: "ui-hint" },
+            "Abilities view unavailable"
+          ),
+        });
+
+    const renderSkillRow = (skill) => {
+      const trained = !!sheet.skills?.[skill.key];
+      const bonus = getSkillBonus(skill);
+      return React.createElement(
+        "button",
+        {
+          key: skill.key,
+          type: "button",
+          className: ["sheet-skill-row", trained ? "tab-btn-active" : ""]
+            .filter(Boolean)
+            .join(" "),
+          style: {
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            width: "100%",
+            padding: "0.5rem 0.75rem",
+            borderRadius: 10,
+            border: "1px solid rgba(148,163,184,0.25)",
+            background: trained ? "rgba(34,197,94,0.15)" : "transparent",
+          },
+          onClick: () => toggleSkill(skill.key),
+        },
+        React.createElement(
+          "div",
+          { style: { textAlign: "left" } },
+          React.createElement(
+            "div",
+            { style: { fontWeight: 600 } },
+            skill.label
+          ),
+          React.createElement(
+            "div",
+            { className: "ui-hint", style: { textTransform: "none" } },
+            `${skill.ability} ability`
+          )
+        ),
+        React.createElement(
+          "div",
+          { style: { textAlign: "right" } },
+          React.createElement(
+            "div",
+            { style: { fontWeight: 600, fontVariantNumeric: "tabular-nums" } },
+            formatBonus(bonus)
+          ),
+          React.createElement(
+            "div",
+            { className: "ui-hint", style: { textTransform: "none" } },
+            trained ? "Proficient" : "Tap to train"
           )
         )
-      ),
+      );
+    };
+
+    const skillSearchField = Field({
+      label: "Filter skills",
+      hint: "Tap a skill to toggle proficiency",
+      children: React.createElement("input", {
+        className: "ui-input",
+        placeholder: "Search Acrobatics, Dex, ...",
+        value: skillSearch,
+        onChange: (e) => setSkillSearch(e.target.value),
+      }),
     });
+
+
+    const skillsTab = SkillsComponent
+      ? React.createElement(SkillsComponent, {
+          Card,
+          skillSearchField,
+          skillSummary,
+          gridCols,
+          ABILITIES,
+          abilityMods,
+          skillsByAbility,
+          renderSkillRow,
+          formatBonus,
+        })
+      : Card({
+          children: React.createElement(
+            "div",
+            { className: "ui-hint" },
+            "Skills view unavailable"
+          ),
+        });
 
     const gearCatalogSection = !hasGearCatalog
       ? null
@@ -1813,81 +1540,24 @@
             : null
         );
 
-    const inventoryTab = Card({
-      children: React.createElement(
-        "div",
-        { className: "grid gap-3" },
-        gearCatalogSection,
-        sheet.inventory.length === 0
-          ? React.createElement(
-              "div",
-              { className: "ui-hint" },
-              "No gear yet. Add what your character carries."
-            )
-          : sheet.inventory.map((item) =>
-              React.createElement(
-                "div",
-                {
-                  key: item.id,
-                  style: {
-                    border: "1px solid rgba(125,211,252,0.2)",
-                    borderRadius: 12,
-                    padding: "0.75rem",
-                    display: "grid",
-                    gap: 8,
-                  },
-                },
-                Field({
-                  label: "Item name",
-                  children: React.createElement("input", {
-                    className: "ui-input",
-                    value: item.name,
-                    onChange: (e) =>
-                      updateInventoryItem(item.id, "name", e.target.value),
-                  }),
-                }),
-                Field({
-                  label: "Quantity",
-                  children: React.createElement("input", {
-                    className: "ui-input",
-                    type: "number",
-                    min: 0,
-                    value: item.qty,
-                    onChange: (e) =>
-                      updateInventoryItem(
-                        item.id,
-                        "qty",
-                        Math.max(0, Number(e.target.value) || 0)
-                      ),
-                  }),
-                }),
-                Field({
-                  label: "Notes",
-                  children: React.createElement("input", {
-                    className: "ui-input",
-                    value: item.note,
-                    placeholder: "Properties, weight, effects...",
-                    onChange: (e) =>
-                      updateInventoryItem(item.id, "note", e.target.value),
-                  }),
-                }),
-                React.createElement(
-                  Btn,
-                  {
-                    type: "button",
-                    onClick: () => removeInventoryItem(item.id),
-                  },
-                  "Remove item"
-                )
-              )
-            ),
-        React.createElement(
+    const inventoryTab = InventoryComponent
+      ? React.createElement(InventoryComponent, {
+          Card,
+          Field,
           Btn,
-          { type: "button", onClick: addInventoryItem },
-          "+ Add item"
-        )
-      ),
-    });
+          gearCatalogSection,
+          inventory: sheet.inventory,
+          addInventoryItem,
+          updateInventoryItem,
+          removeInventoryItem,
+        })
+      : Card({
+          children: React.createElement(
+            "div",
+            { className: "ui-hint" },
+            "Inventory view unavailable"
+          ),
+        });
 
     const spellCatalogSection = !hasSpellCatalog
       ? null
@@ -2271,11 +1941,11 @@
         spell.concentration ? "Concentration" : null,
       ]
         .filter(Boolean)
-        .join(" • ");
+        .join(" \u2022 ");
       const infoLine = [spell.range || "", spell.duration || ""]
         .map((val) => (val || "").trim())
         .filter(Boolean)
-        .join(" • ");
+        .join(" \u2022 ");
       const noteLine = (spell.note || "").trim();
 
       const details = [
@@ -2458,24 +2128,18 @@
       const quickActions = React.createElement(
         "div",
         { className: "sheet-spell-summary-actions" },
-        React.createElement(
-          Btn,
-          {
-            type: "button",
-            className: spell.prepared ? "btn-primary" : "btn-muted",
-            onClick: () => updateSpell(spell.id, { prepared: !spell.prepared }),
-          },
-          spell.prepared ? "Prepared" : "Mark prepared"
-        ),
-        React.createElement(
-          Btn,
-          {
-            type: "button",
-            className: "btn-muted",
-            onClick: () => toggleSpellEditor(spell.id),
-          },
-          isExpanded ? "Hide details" : "Edit details"
-        )
+        Btn({
+          type: "button",
+          className: spell.prepared ? "btn-primary" : "btn-muted",
+          onClick: () => updateSpell(spell.id, { prepared: !spell.prepared }),
+          children: spell.prepared ? "Prepared" : "Mark prepared",
+        }),
+        Btn({
+          type: "button",
+          className: "btn-muted",
+          onClick: () => toggleSpellEditor(spell.id),
+          children: isExpanded ? "Hide details" : "Edit details",
+        })
       );
 
       return React.createElement(
@@ -2560,139 +2224,59 @@
       );
     };
 
-    const spellsTab = Card({
-      children: React.createElement(
-        "div",
-        { className: "grid gap-3" },
-        spellCatalogSection,
-        spellStatsBar,
-        totalSpells === 0
-          ? React.createElement(
-              "div",
-              { className: "ui-hint" },
-              "No spells recorded yet. Use the catalog above or add them manually."
-            )
-          : React.createElement(
-              React.Fragment,
-              null,
-              spellFilterControls,
-              groupedSpells.length === 0
-                ? React.createElement(
-                    "div",
-                    { className: "ui-hint" },
-                    "No spells match the current filters."
-                  )
-                : groupedSpells.map(([level, spells]) => {
-                    const stats =
-                      spellLevelStats.get(level) || {
-                        total: spells.length,
-                        prepared: spells.filter((sp) => sp.prepared).length,
-                      };
-                    const collapsed = isLevelCollapsed(level);
-                    return React.createElement(
-                      "div",
-                      {
-                        key: level,
-                        className: ["sheet-spell-group", collapsed ? "collapsed" : ""]
-                          .filter(Boolean)
-                          .join(" "),
-                      },
-                      React.createElement(
-                        "div",
-                        { className: "sheet-spell-group-header" },
-                        React.createElement(
-                          "div",
-                          { className: "sheet-spell-group-title" },
-                          levelLabel(level)
-                        ),
-                        React.createElement(
-                          "div",
-                          { className: "sheet-spell-group-meta" },
-                          `${stats.prepared}/${stats.total} prepared`
-                        ),
-                        React.createElement(
-                          "div",
-                          { className: "sheet-spell-group-actions" },
-                          React.createElement(
-                            Btn,
-                            {
-                              type: "button",
-                              className: "btn-muted",
-                              onClick: () => toggleSpellLevelCollapse(level),
-                            },
-                            collapsed ? "Expand" : "Collapse"
-                          ),
-                          stats.prepared < stats.total
-                            ? React.createElement(
-                                Btn,
-                                {
-                                  type: "button",
-                                  className: "btn-primary",
-                                  onClick: () => setPreparedForLevel(level, true),
-                                },
-                                "Prepare all"
-                              )
-                            : null,
-                          stats.prepared > 0
-                            ? React.createElement(
-                                Btn,
-                                {
-                                  type: "button",
-                                  className: "btn-muted",
-                                  onClick: () => setPreparedForLevel(level, false),
-                                },
-                                "Clear prepared"
-                              )
-                            : null
-                        )
-                      ),
-                      collapsed
-                        ? React.createElement(
-                            "div",
-                            {
-                              className: "sheet-spell-group-collapsed-hint",
-                              style: {
-                                fontSize: 12,
-                                opacity: 0.7,
-                                padding: "0 4px 8px",
-                              },
-                            },
-                            `${spells.length} spell${
-                              spells.length === 1 ? "" : "s"
-                            } hidden`
-                          )
-                        : React.createElement(
-                            "div",
-                            { className: "sheet-spell-group-body" },
-                            spells.map((spell) => renderSpellEditor(spell))
-                          )
-                    );
-                  })
-            ),
-        React.createElement(
+    const spellsTab = SpellsComponent
+      ? React.createElement(SpellsComponent, {
+          Card,
           Btn,
-          { type: "button", onClick: addSpell },
-          "+ Add spell"
-        )
-      ),
-    });
+          spellCatalogSection,
+          spellStatsBar,
+          totalSpells,
+          spellFilterControls,
+          groupedSpells,
+          spellLevelStats,
+          toggleSpellLevelCollapse,
+          isLevelCollapsed,
+          setPreparedForLevel,
+          renderSpellEditor,
+          addSpell,
+          levelLabel,
+        })
+      : Card({
+          children: React.createElement(
+            "div",
+            { className: "ui-hint" },
+            "Spells view unavailable"
+          ),
+        });
 
-    const notesTab = Card({
-      children: Field({
-        label: "Campaign notes",
-        children: React.createElement("textarea", {
-          className: "ui-input",
-          style: { minHeight: 180, resize: "vertical" },
-          value: sheet.notes || "",
-          placeholder: "Backstory, session notes, bonds...",
-          onChange: (e) =>
-            updateSheet((prev) => ({ ...prev, notes: e.target.value })),
-        }),
-      }),
-    });
+    const notesTab = NotesComponent
+      ? React.createElement(NotesComponent, {
+          Card,
+          Field,
+          notes: sheet.notes,
+          onChange: (value) =>
+            updateSheet((prev) => ({
+              ...prev,
+              notes: value,
+            })),
+        })
+      : Card({
+          children: Field({
+            label: "Campaign notes",
+            children: React.createElement("textarea", {
+              className: "ui-input",
+              style: { minHeight: 180, resize: "vertical" },
+              value: sheet.notes || "",
+              placeholder: "Backstory, session notes, bonds...",
+              onChange: (e) =>
+                updateSheet((prev) => ({ ...prev, notes: e.target.value })),
+            }),
+          }),
+        });
 
     const tabs = [
       { id: "overview", label: "Overview", node: overviewTab },
+      { id: "combat", label: "Combat", node: combatTab },
       { id: "abilities", label: "Abilities", node: abilitiesTab },
       {
         id: "skills",
@@ -2778,8 +2362,8 @@
       "div",
       { className: "grid gap-4" },
       heroCard,
-      actionBar,
       errorBanner,
+      autosaveStatus,
       tabNav,
       activeContent
     );
@@ -2787,3 +2371,9 @@
 
   AppNS.SheetPage = SheetPage;
 })();
+
+
+
+
+
+
