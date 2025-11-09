@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   const AppNS = (window.App = window.App || {});
   const { useEffect, useMemo, useState } = React;
 
@@ -110,39 +110,20 @@
     };
     const res = await getJSON(buildURL("faith_items", params));
     if (res.ok) {
-      // Normalize to old shape: .pack inferred from god
-      res.data = res.data.map((x) => ({
-        ...x,
-        pack: !!x.god,
-        description:
-          typeof x.description === "string" ? x.description.trim() : "",
-      }));
+      // Normalize to old shape and include uses metadata
+      res.data = res.data.map((x) => normalizeItem(x));
     }
     return res;
   }
 
   // PACKS fallback (if table not found or REST blocked)
   function listFromPacks(god) {
-    const base = (window.PACKS?.BASE_ITEMS || []).map((x) => ({
-      ...x,
-      pack: false,
-      description:
-        typeof x.description === "string"
-          ? x.description.trim()
-          : typeof x.desc === "string"
-          ? x.desc.trim()
-          : "",
-    }));
-    const pack = (window.PACKS?.GOD_PACKS?.[god] || []).map((x) => ({
-      ...x,
-      pack: true,
-      description:
-        typeof x.description === "string"
-          ? x.description.trim()
-          : typeof x.desc === "string"
-          ? x.desc.trim()
-          : "",
-    }));
+    const base = (window.PACKS?.BASE_ITEMS || []).map((x) =>
+      normalizeItem(x, { pack: false })
+    );
+    const pack = (window.PACKS?.GOD_PACKS?.[god] || []).map((x) =>
+      normalizeItem(x, { pack: true })
+    );
     return [...base, ...pack];
   }
 
@@ -179,6 +160,133 @@
       );
     else arr.sort((a, b) => a.name.localeCompare(b.name));
     return arr;
+  }
+
+  const safeJSONParse = (value) => {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  };
+
+  function normalizeUsesValue(value) {
+    if (value == null) return null;
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (!trimmed) return null;
+      if (
+        (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+        (trimmed.startsWith("[") && trimmed.endsWith("]"))
+      ) {
+        const parsed = safeJSONParse(trimmed);
+        if (parsed !== null) return normalizeUsesValue(parsed);
+      }
+      const maybeNum = Number(trimmed);
+      if (Number.isFinite(maybeNum)) {
+        return { label: "Uses", max: Math.max(0, maybeNum) };
+      }
+      return { label: trimmed };
+    }
+    if (typeof value === "number") {
+      return { label: "Uses", max: Math.max(0, value) };
+    }
+    if (Array.isArray(value)) {
+      const mapped = value.map(normalizeUsesValue).filter(Boolean);
+      return mapped.length ? mapped : null;
+    }
+    if (typeof value === "object") {
+      const meta = {};
+      if (value === null) return null;
+      const maxSource =
+        value.max ??
+        value.total ??
+        value.count ??
+        value.limit ??
+        value.charges ??
+        value.value;
+      if (Number.isFinite(Number(maxSource))) {
+        meta.max = Math.max(0, Number(maxSource));
+      }
+      const labelCandidate =
+        value.label ||
+        value.name ||
+        value.title ||
+        value.text ||
+        (typeof value.desc === "string" ? value.desc : null) ||
+        (typeof value.description === "string" ? value.description : null);
+      meta.label = labelCandidate || "Uses";
+      const reset =
+        value.reset || value.refresh || value.per || value.interval || value.cycle;
+      if (reset) meta.reset = reset;
+      const note = value.note || value.notes;
+      if (note) meta.note = note;
+      return meta;
+    }
+    return null;
+  }
+
+  function getUsesMeta(source, isRaw = false) {
+    if (!source) return null;
+    if (!isRaw && typeof source === "object" && !Array.isArray(source)) {
+      if (source.usesMeta) return getUsesMeta(source.usesMeta, true);
+      if (Object.prototype.hasOwnProperty.call(source, "uses")) {
+        return getUsesMeta(source.uses, true);
+      }
+    }
+    const normalized = normalizeUsesValue(source);
+    if (!normalized) return null;
+    if (Array.isArray(normalized)) return normalized[0] || null;
+    return normalized;
+  }
+
+  function formatUsesSummary(meta) {
+    if (!meta) return "";
+    const label = meta.label || "Uses";
+    const parts = [];
+    if (Number.isFinite(meta.max)) {
+      parts.push(`${meta.max} charge${meta.max === 1 ? "" : "s"}`);
+    }
+    if (meta.reset) {
+      parts.push(`per ${meta.reset}`);
+    }
+    if (!parts.length && meta.note) parts.push(meta.note);
+    if (!parts.length) return label;
+    return `${label}: ${parts.join(" / ")}`;
+  }
+
+  function getChargeTrackingState(item) {
+    const usesMeta = getUsesMeta(item);
+    if (!usesMeta || !Number.isFinite(usesMeta.max)) return null;
+    const max = Math.max(0, usesMeta.max);
+    const used = Math.min(Math.max(Number(item?.chargesUsed) || 0, 0), max);
+    return {
+      usesMeta,
+      max,
+      used,
+      remaining: Math.max(max - used, 0),
+    };
+  }
+
+  function normalizeItem(raw, overrides = {}) {
+    if (!raw || typeof raw !== "object") return raw;
+    const description =
+      typeof raw.description === "string"
+        ? raw.description.trim()
+        : typeof raw.desc === "string"
+        ? raw.desc.trim()
+        : "";
+    const item = {
+      ...raw,
+      ...overrides,
+      description,
+    };
+    if (!Object.prototype.hasOwnProperty.call(overrides, "pack")) {
+      item.pack = !!item.god;
+    }
+    const usesMeta = getUsesMeta(item);
+    if (usesMeta) item.usesMeta = usesMeta;
+    return item;
   }
 
   // ---------- UI bits ----------
@@ -239,6 +347,37 @@
     const [items, setItems] = useState([]);
     const [usingFallback, setUsingFallback] = useState(false);
 
+    const catalogById = useMemo(() => {
+      const map = new Map();
+      (items || []).forEach((it) => {
+        if (it?.id) map.set(it.id, it);
+      });
+      return map;
+    }, [items]);
+
+    function hydrateOwnedEntry(entry) {
+      if (!entry || typeof entry !== "object") return entry;
+      const base = entry.id ? catalogById.get(entry.id) : null;
+      const merged = base
+        ? {
+            ...base,
+            ...entry,
+            pack:
+              typeof entry.pack === "boolean"
+                ? entry.pack
+                : typeof base.pack === "boolean"
+                ? base.pack
+                : !!entry.god,
+          }
+        : { ...entry };
+      const normalized = normalizeItem(merged);
+      const chargesUsed = Number.isFinite(Number(entry.chargesUsed))
+        ? Number(entry.chargesUsed)
+        : Number(normalized.chargesUsed) || 0;
+      normalized.chargesUsed = chargesUsed;
+      return normalized;
+    }
+
     const [query, setQuery] = useState("");
     const [debouncedQuery, setDebouncedQuery] = useState("");
     useEffect(() => {
@@ -248,6 +387,7 @@
 
     const [type, setType] = useState("All");
     const [sort, setSort] = useState("name");
+    const [activeView, setActiveView] = useState("store");
 
     useEffect(() => {
       let active = true;
@@ -310,7 +450,10 @@
 
     const fp = profile?.fp ?? 0;
     const rank = rankFromFP(fp);
-    const owned = Array.isArray(profile?.owned) ? profile.owned : [];
+    const owned = useMemo(() => {
+      const raw = Array.isArray(profile?.owned) ? profile.owned : [];
+      return raw.map((entry) => hydrateOwnedEntry(entry) || entry);
+    }, [profile?.owned, catalogById]);
     const ownedCount = owned.length;
     const nextRank = [...RANKS].find((r) => r.min > fp);
     const journeyHint = nextRank
@@ -332,16 +475,19 @@
       const next = { ...fresh };
       next.fp = (next.fp ?? 0) - (it.cost ?? 0);
       next.owned = Array.isArray(next.owned) ? next.owned.slice() : [];
-      next.owned.push(it);
+      next.owned.push({ ...it, chargesUsed: 0 });
       await saveProfileAny(sess.username, next);
       setProfile(next);
       AppNS.toast && AppNS.toast("Relic claimed!");
     }
 
     async function refund(it) {
-      if (!isAdmin) return;
       const fresh = await refreshProfile();
       if (!fresh) return;
+      if (fresh.lock) {
+        AppNS.toast && AppNS.toast("Store is locked. Refund unavailable.");
+        return;
+      }
       const ix = (fresh.owned || []).findIndex((o) => o.id === it.id);
       if (ix < 0) return;
 
@@ -353,6 +499,47 @@
       setProfile(next);
       AppNS.toast && AppNS.toast("Refund processed.");
     }
+
+    async function mutateOwnedCharge(index, updater) {
+      const fresh = await refreshProfile();
+      if (!fresh) return;
+      const list = Array.isArray(fresh.owned) ? fresh.owned.slice() : [];
+      const target = list[index];
+      if (!target) return;
+      const hydrated = hydrateOwnedEntry(target) || target;
+      const state = getChargeTrackingState(hydrated);
+      if (!state) {
+        AppNS.toast && AppNS.toast("This relic has no charges to track.");
+        return;
+      }
+      const desired = updater(state);
+      if (!Number.isFinite(desired)) return;
+      const clamped = Math.min(Math.max(desired, 0), state.max);
+      if (clamped === state.used) {
+        AppNS.toast &&
+          AppNS.toast(
+            state.used >= state.max
+              ? "All charges already spent."
+              : "No charges spent yet."
+          );
+        return;
+      }
+      const updated = { ...hydrated, chargesUsed: clamped };
+      list[index] = updated;
+      const next = { ...fresh, owned: list };
+      await saveProfileAny(sess.username, next);
+      setProfile(next);
+      const message =
+        clamped === 0
+          ? `Charges reset for ${hydrated.name}.`
+          : `Charge ${clamped}/${state.max} recorded for ${hydrated.name}.`;
+      AppNS.toast && AppNS.toast(message);
+    }
+
+    const spendCharge = (index) =>
+      mutateOwnedCharge(index, (state) => Math.min(state.used + 1, state.max));
+
+    const resetCharges = (index) => mutateOwnedCharge(index, () => 0);
 
     async function adjustFP(delta) {
       const next = { ...(await refreshProfile()) };
@@ -600,6 +787,53 @@
         )
     );
 
+    const viewTabs = React.createElement(
+      Card,
+      {
+        style: {
+          display: "flex",
+          gap: 12,
+          flexWrap: "wrap",
+          alignItems: "stretch",
+        },
+      },
+      [
+        { key: "store", label: "Relics Store" },
+        { key: "vault", label: "My Vault" },
+      ].map((tab) => {
+        const active = activeView === tab.key;
+        const baseStyle = {
+          flex: "1 1 160px",
+          minWidth: 140,
+          justifyContent: "center",
+        };
+        const variantStyle = active
+          ? {
+              borderColor: "rgba(96, 165, 250, 0.9)",
+              background: "rgba(37, 99, 235, 0.25)",
+              color: "#f8fafc",
+              opacity: 1,
+            }
+          : {
+              borderColor: "rgba(148, 163, 184, 0.35)",
+              background: "rgba(15, 23, 42, 0.6)",
+              color: "#e2e8f0",
+              opacity: 0.75,
+            };
+        return React.createElement(
+          Btn,
+          {
+            key: tab.key,
+            onClick: () => setActiveView(tab.key),
+            style: Object.assign({}, baseStyle, variantStyle),
+            "aria-pressed": active,
+            type: "button",
+          },
+          tab.label
+        );
+      })
+    );
+
     function ItemCard({ it }) {
       const ownedAlready = owned.some((o) => o.id === it.id);
       const disableBuy =
@@ -612,6 +846,7 @@
         ? "Not enough FP"
         : "";
       const accent = it.god ? "rgba(250, 204, 21, 0.35)" : "rgba(125, 211, 252, 0.35)";
+      const usesMeta = getUsesMeta(it);
       return React.createElement(
         Card,
         {
@@ -665,7 +900,7 @@
             { style: { opacity: 0.75, fontSize: 14, lineHeight: 1.5 } },
             it.description
           ),
-        it.uses &&
+        usesMeta &&
           React.createElement(
             "div",
             {
@@ -676,7 +911,7 @@
                 fontSize: 12,
               },
             },
-            `Uses: ${it.uses}`
+            formatUsesSummary(usesMeta)
           ),
         React.createElement(
           "div",
@@ -713,12 +948,13 @@
               },
               ownedAlready ? "Claimed" : "Claim Relic"
             ),
-            isAdmin &&
-              ownedAlready &&
+            ownedAlready &&
               React.createElement(
                 "button",
                 {
                   className: "btn border-red-500",
+                  disabled: profile.lock,
+                  title: profile.lock ? "Store is locked" : "Return half the FP to your pool",
                   onClick: () => refund(it),
                 },
                 "Refund 50%"
@@ -762,19 +998,50 @@
                 gap: 8,
               },
             },
-            owned.map((it) =>
-              React.createElement(
+            owned.map((it, idx) => {
+              const charges = getChargeTrackingState(it);
+              const accent = it.god
+                ? "rgba(250, 204, 21, 0.35)"
+                : "rgba(125, 211, 252, 0.35)";
+              const rowStyle = {
+                display: "flex",
+                flexWrap: "wrap",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 12,
+              };
+              if (charges) {
+                rowStyle.cursor = "pointer";
+                rowStyle.border = "1px dashed rgba(148, 163, 184, 0.35)";
+                rowStyle.borderRadius = 8;
+                rowStyle.padding = 12;
+                rowStyle.background = "rgba(15, 23, 42, 0.4)";
+              }
+              const interactiveProps = charges
+                ? {
+                    onClick: () => spendCharge(idx),
+                    role: "button",
+                    tabIndex: 0,
+                    onKeyDown: (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        spendCharge(idx);
+                      }
+                    },
+                  }
+                : {};
+              return React.createElement(
                 "div",
-                {
-                  key: it.id,
-                  style: {
-                    display: "flex",
-                    flexWrap: "wrap",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: 12,
+                Object.assign(
+                  {
+                    key: `${it.id}:${idx}`,
+                    style: rowStyle,
+                    title: charges
+                      ? `Click to spend a charge (${charges.remaining} remaining)`
+                      : undefined,
                   },
-                },
+                  interactiveProps
+                ),
                 React.createElement(
                   "div",
                   null,
@@ -787,46 +1054,142 @@
                     "div",
                     { style: { fontSize: 12, opacity: 0.7 } },
                     `${it.type || "Relic"} - ${it.cost ?? 0} FP`
-                  )
+                  ),
+                  it.description
+                    ? React.createElement(
+                        "div",
+                        {
+                          style: {
+                            fontSize: 12,
+                            opacity: 0.75,
+                            marginTop: 4,
+                            lineHeight: 1.4,
+                          },
+                        },
+                        it.description
+                      )
+                    : null
                 ),
                 React.createElement(
                   "div",
                   {
                     style: {
                       display: "flex",
-                      flexWrap: "wrap",
-                      gap: 8,
-                      alignItems: "center",
+                      flexDirection: "column",
+                      alignItems: "flex-end",
+                      gap: 6,
+                      flex: "0 1 auto",
                     },
                   },
                   React.createElement(
-                    "span",
+                    "div",
                     {
-                      className: "tag",
                       style: {
-                        borderColor: it.god
-                          ? "rgba(250, 204, 21, 0.35)"
-                          : "rgba(125, 211, 252, 0.35)",
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: 8,
+                        alignItems: "center",
+                        justifyContent: "flex-end",
                       },
                     },
-                    it.god ? "Patron Exclusive" : "Sanctum Supply"
-                  ),
-                  isAdmin
-                    ? React.createElement(
-                        "button",
-                        {
-                          className: "btn border-red-500",
-                          style: { padding: "6px 12px" },
-                          onClick: () => refund(it),
-                          title: "Return half the FP to the player",
+                    React.createElement(
+                      "span",
+                      {
+                        className: "tag",
+                        style: {
+                          borderColor: accent,
                         },
-                        "Refund 50%"
+                      },
+                      it.god ? "Patron Exclusive" : "Sanctum Supply"
+                    ),
+                    React.createElement(
+                      "button",
+                      {
+                        className: "btn border-red-500",
+                        style: { padding: "6px 12px" },
+                        disabled: profile.lock,
+                        title: profile.lock
+                          ? "Store is locked"
+                          : "Return half the FP to your pool",
+                        onClick: (e) => {
+                          e.stopPropagation();
+                          refund(it);
+                        },
+                      },
+                      "Refund 50%"
+                    )
+                  ),
+                  charges
+                    ? React.createElement(
+                        "div",
+                        {
+                          style: {
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: 8,
+                            alignItems: "center",
+                            justifyContent: "flex-end",
+                            fontSize: 12,
+                          },
+                        },
+                        React.createElement(
+                          "span",
+                          {
+                            className: "tag",
+                            style: {
+                              borderColor: accent,
+                            },
+                          },
+                          `${(charges.usesMeta.label || "Charges")}: ${charges.used}/${
+                            charges.max
+                          }${
+                            charges.usesMeta.reset ? ` / ${charges.usesMeta.reset}` : ""
+                          }`
+                        ),
+                        React.createElement(
+                          "span",
+                          { style: { opacity: 0.7 } },
+                          "Click entry to spend a charge"
+                        ),
+                        charges.used > 0 &&
+                          React.createElement(
+                            "button",
+                            {
+                              className: "btn border-slate-500",
+                              onClick: (e) => {
+                                e.stopPropagation();
+                                resetCharges(idx);
+                              },
+                            },
+                            "Reset"
+                          )
                       )
                     : null
                 )
-              )
-            )
+              );
+            })
           );
+
+    const storeSection = React.createElement(
+      "div",
+      { className: "grid gap-3" },
+      filters,
+      React.createElement(
+        "div",
+        { className: "grid gap-2" },
+        React.createElement("h3", null, "Relics Available"),
+        itemsGrid
+      )
+    );
+
+    const vaultSection = React.createElement(
+      "div",
+      { className: "grid gap-2" },
+      React.createElement("h3", null, "Vaulted Treasures"),
+      ownedSection
+    );
+
+    const activeSection = activeView === "store" ? storeSection : vaultSection;
 
     const lockBanner = profile.lock
       ? React.createElement(
@@ -914,24 +1277,14 @@
       hero,
       statGrid,
       lockBanner,
-      filters,
-      React.createElement(
-        "div",
-        { className: "grid gap-2" },
-        React.createElement("h3", null, "Relics Available"),
-        itemsGrid
-      ),
-      React.createElement(
-        "div",
-        { className: "grid gap-2" },
-        React.createElement("h3", null, "Vaulted Treasures"),
-        ownedSection
-      ),
+      viewTabs,
+      activeSection,
       adminControls
     );
   }
   AppNS.StorePage = StorePage;
 })();
+
 
 
 
