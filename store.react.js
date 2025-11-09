@@ -102,7 +102,7 @@
       sort === "cost" ? "sort_index.asc,cost.asc,name.asc" : "sort_index.asc,name.asc";
     // NOTE: PostgREST OR: or=(god.is.null,god.eq.X)
     const params = {
-      select: "id,type,name,cost,description:desc,god,active,sort_index",
+      select: "id,type,name,cost,description:desc,god,active,sort_index,uses",
       or: `(god.is.null,god.eq.${god})`,
       active: "eq.true",
       order,
@@ -664,6 +664,19 @@
             "div",
             { style: { opacity: 0.75, fontSize: 14, lineHeight: 1.5 } },
             it.description
+          ),
+        it.uses &&
+          React.createElement(
+            "div",
+            {
+              className: "tag",
+              style: {
+                borderColor: accent,
+                width: "fit-content",
+                fontSize: 12,
+              },
+            },
+            `Uses: ${it.uses}`
           ),
         React.createElement(
           "div",
