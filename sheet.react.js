@@ -388,6 +388,9 @@
     const [spellCatalogConcentration, setSpellCatalogConcentration] = useState(
       "any"
     );
+    const [spellListSearch, setSpellListSearch] = useState("");
+    const [collapsedSpellLevels, setCollapsedSpellLevels] = useState({});
+    const [openSpellEditors, setOpenSpellEditors] = useState({});
 
     const hasClassCatalog = typeof catalog.listClasses === "function";
     const hasSpeciesCatalog = typeof catalog.listSpecies === "function";
@@ -725,6 +728,11 @@
       return list;
     }, [sheet.spells]);
     const filteredSpells = useMemo(() => {
+      const terms = spellListSearch
+        .trim()
+        .toLowerCase()
+        .split(/\s+/)
+        .filter(Boolean);
       return sortedSpells.filter((spell) => {
         const lvl = Number(spell.level ?? 0);
         if (
@@ -735,9 +743,28 @@
         }
         if (spellFilterPrepared === "prepared" && !spell.prepared) return false;
         if (spellFilterPrepared === "unprepared" && spell.prepared) return false;
+        if (terms.length) {
+          const haystack = [
+            spell.name,
+            spell.school,
+            spell.description,
+            spell.note,
+            spell.range,
+            spell.duration,
+            Array.isArray(spell.tags) ? spell.tags.join(" ") : "",
+          ]
+            .map((val) => (val || "").toString().toLowerCase())
+            .join(" ");
+          if (!terms.every((term) => haystack.includes(term))) return false;
+        }
         return true;
       });
-    }, [sortedSpells, spellFilterLevel, spellFilterPrepared]);
+    }, [
+      sortedSpells,
+      spellFilterLevel,
+      spellFilterPrepared,
+      spellListSearch,
+    ]);
     const groupedSpells = useMemo(() => {
       const map = new Map();
       filteredSpells.forEach((spell) => {
@@ -792,6 +819,40 @@
       const limit = spellSearch ? 12 : 8;
       return filtered.slice(0, limit);
     }, [hasSpellCatalog, knownSpellNames, spellResults, spellSearch]);
+
+    const spellStats = useMemo(() => {
+      const list = Array.isArray(sheet.spells) ? sheet.spells : [];
+      let prepared = 0;
+      let rituals = 0;
+      let concentration = 0;
+      list.forEach((spell) => {
+        if (spell.prepared) prepared += 1;
+        if (spell.ritual) rituals += 1;
+        if (spell.concentration) concentration += 1;
+      });
+      const total = list.length;
+      const preparedPct = total ? Math.round((prepared / total) * 100) : 0;
+      return { total, prepared, rituals, concentration, preparedPct };
+    }, [sheet.spells]);
+
+    const toggleSpellLevelCollapse = (level) => {
+      const key = String(level);
+      setCollapsedSpellLevels((prev) => ({
+        ...prev,
+        [key]: !prev[key],
+      }));
+    };
+
+    const isLevelCollapsed = (level) =>
+      !!collapsedSpellLevels[String(level)];
+
+    const toggleSpellEditor = (id) =>
+      setOpenSpellEditors((prev) => ({
+        ...prev,
+        [id]: !prev[id],
+      }));
+
+    const isSpellEditorOpen = (id) => !!openSpellEditors[id];
 
     const describeWeapon = (weapon) => {
       if (!weapon) return "";
@@ -908,10 +969,13 @@
     }, [sortedSpells]);
 
     const filtersActive =
-      spellFilterLevel !== "all" || spellFilterPrepared !== "any";
+      spellFilterLevel !== "all" ||
+      spellFilterPrepared !== "any" ||
+      !!spellListSearch.trim();
     const resetSpellFilters = () => {
       setSpellFilterLevel("all");
       setSpellFilterPrepared("any");
+      setSpellListSearch("");
     };
 
     const addInventoryFromStore = (item) =>
@@ -2106,6 +2170,15 @@
                 )
               ),
             }),
+            Field({
+              label: "Search known spells",
+              children: React.createElement("input", {
+                className: "ui-input",
+                value: spellListSearch,
+                placeholder: "name, school, effect, note",
+                onChange: (e) => setSpellListSearch(e.target.value),
+              }),
+            }),
             React.createElement(
               "div",
               { className: "sheet-spell-filter-summary" },
@@ -2124,16 +2197,88 @@
             )
           );
 
+    const spellStatsBar =
+      spellStats.total === 0
+        ? null
+        : React.createElement(
+            "div",
+            {
+              className: "sheet-spell-stats",
+              style: {
+                display: "grid",
+                gridTemplateColumns: isCompact
+                  ? "repeat(2, minmax(0, 1fr))"
+                  : "repeat(4, minmax(0, 1fr))",
+                gap: 12,
+              },
+            },
+            [
+              { label: "Known spells", value: spellStats.total },
+              {
+                label: "Prepared",
+                value: `${spellStats.prepared}${
+                  spellStats.total
+                    ? ` (${spellStats.preparedPct}% )`
+                    : ""
+                }`,
+              },
+              { label: "Rituals", value: spellStats.rituals },
+              { label: "Concentration", value: spellStats.concentration },
+            ].map((stat) =>
+              React.createElement(
+                "div",
+                {
+                  key: stat.label,
+                  className: "sheet-spell-stat",
+                  style: {
+                    border: "1px solid rgba(148,163,184,0.35)",
+                    borderRadius: 12,
+                    padding: "12px 16px",
+                    background: "rgba(15,23,42,0.4)",
+                  },
+                },
+                React.createElement(
+                  "div",
+                  {
+                    className: "sheet-spell-stat-value",
+                    style: { fontSize: 20, fontWeight: 600 },
+                  },
+                  stat.value
+                ),
+                React.createElement(
+                  "div",
+                  {
+                    className: "sheet-spell-stat-label",
+                    style: { fontSize: 12, opacity: 0.75, marginTop: 4 },
+                  },
+                  stat.label
+                )
+              )
+            )
+          );
+
     const renderSpellEditor = (spell) => {
       const componentsText = Array.isArray(spell.components)
         ? spell.components.join(", ")
         : "";
-      return React.createElement(
-        "div",
-        {
-          key: spell.id,
-          className: "sheet-spell-card",
-        },
+      const isExpanded = isSpellEditorOpen(spell.id);
+      const title = spell.name?.trim() || "Untitled spell";
+      const subtitle = [
+        levelLabel(Number(spell.level ?? 0)),
+        spell.school,
+        spell.prepared ? "Prepared" : null,
+        spell.ritual ? "Ritual" : null,
+        spell.concentration ? "Concentration" : null,
+      ]
+        .filter(Boolean)
+        .join(" • ");
+      const infoLine = [spell.range || "", spell.duration || ""]
+        .map((val) => (val || "").trim())
+        .filter(Boolean)
+        .join(" • ");
+      const noteLine = (spell.note || "").trim();
+
+      const details = [
         Field({
           label: "Spell name",
           children: React.createElement("input", {
@@ -2307,7 +2452,111 @@
             className: "btn-muted",
           },
           "Remove spell"
+        ),
+      ];
+
+      const quickActions = React.createElement(
+        "div",
+        { className: "sheet-spell-summary-actions" },
+        React.createElement(
+          Btn,
+          {
+            type: "button",
+            className: spell.prepared ? "btn-primary" : "btn-muted",
+            onClick: () => updateSpell(spell.id, { prepared: !spell.prepared }),
+          },
+          spell.prepared ? "Prepared" : "Mark prepared"
+        ),
+        React.createElement(
+          Btn,
+          {
+            type: "button",
+            className: "btn-muted",
+            onClick: () => toggleSpellEditor(spell.id),
+          },
+          isExpanded ? "Hide details" : "Edit details"
         )
+      );
+
+      return React.createElement(
+        "div",
+        {
+          key: spell.id,
+          className: "sheet-spell-card",
+        },
+        React.createElement(
+          "div",
+          {
+            className: "sheet-spell-card-summary",
+            onClick: (e) => {
+              if (
+                e.target.closest("button") ||
+                e.target.closest("input") ||
+                e.target.closest("select")
+              )
+                return;
+              toggleSpellEditor(spell.id);
+            },
+            style: {
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+            },
+          },
+          React.createElement(
+            "div",
+            { className: "sheet-spell-card-header" },
+            React.createElement(
+              "div",
+              {
+                className: "sheet-spell-card-title",
+                style: { fontSize: 16, fontWeight: 600 },
+              },
+              title
+            ),
+            quickActions
+          ),
+          subtitle
+            ? React.createElement(
+                "div",
+                {
+                  className: "sheet-spell-card-subtitle",
+                  style: { fontSize: 12, opacity: 0.75 },
+                },
+                subtitle
+              )
+            : null,
+          infoLine
+            ? React.createElement(
+                "div",
+                {
+                  className: "sheet-spell-card-info-line",
+                  style: { fontSize: 12, opacity: 0.6 },
+                },
+                infoLine
+              )
+            : null,
+          noteLine
+            ? React.createElement(
+                "div",
+                {
+                  className: "sheet-spell-card-note",
+                  style: { fontSize: 12, opacity: 0.75 },
+                },
+                noteLine
+              )
+            : null
+        ),
+        isExpanded
+          ? React.createElement(
+              "div",
+              {
+                className: "sheet-spell-card-details",
+                style: { display: "grid", gap: 12 },
+              },
+              details
+            )
+          : null
       );
     };
 
@@ -2316,6 +2565,7 @@
         "div",
         { className: "grid gap-3" },
         spellCatalogSection,
+        spellStatsBar,
         totalSpells === 0
           ? React.createElement(
               "div",
@@ -2338,9 +2588,15 @@
                         total: spells.length,
                         prepared: spells.filter((sp) => sp.prepared).length,
                       };
+                    const collapsed = isLevelCollapsed(level);
                     return React.createElement(
                       "div",
-                      { key: level, className: "sheet-spell-group" },
+                      {
+                        key: level,
+                        className: ["sheet-spell-group", collapsed ? "collapsed" : ""]
+                          .filter(Boolean)
+                          .join(" "),
+                      },
                       React.createElement(
                         "div",
                         { className: "sheet-spell-group-header" },
@@ -2357,6 +2613,15 @@
                         React.createElement(
                           "div",
                           { className: "sheet-spell-group-actions" },
+                          React.createElement(
+                            Btn,
+                            {
+                              type: "button",
+                              className: "btn-muted",
+                              onClick: () => toggleSpellLevelCollapse(level),
+                            },
+                            collapsed ? "Expand" : "Collapse"
+                          ),
                           stats.prepared < stats.total
                             ? React.createElement(
                                 Btn,
@@ -2381,11 +2646,26 @@
                             : null
                         )
                       ),
-                      React.createElement(
-                        "div",
-                        { className: "sheet-spell-group-body" },
-                        spells.map((spell) => renderSpellEditor(spell))
-                      )
+                      collapsed
+                        ? React.createElement(
+                            "div",
+                            {
+                              className: "sheet-spell-group-collapsed-hint",
+                              style: {
+                                fontSize: 12,
+                                opacity: 0.7,
+                                padding: "0 4px 8px",
+                              },
+                            },
+                            `${spells.length} spell${
+                              spells.length === 1 ? "" : "s"
+                            } hidden`
+                          )
+                        : React.createElement(
+                            "div",
+                            { className: "sheet-spell-group-body" },
+                            spells.map((spell) => renderSpellEditor(spell))
+                          )
                     );
                   })
             ),
