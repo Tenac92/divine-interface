@@ -25,15 +25,132 @@
       onResetSpellSlot = () => {},
       onPreparedSpellClick = () => {},
       weaponItems = [],
+      onShortRest = () => {},
+      onLongRest = () => {},
     } = props;
 
     const mobileNumberProps = { inputMode: "numeric", pattern: "[0-9]*" };
+    const stepperButtonStyle = {
+      borderRadius: 8,
+      border: "1px solid rgba(148,163,184,0.4)",
+      background: "rgba(15,23,42,0.35)",
+      color: "#e2e8f0",
+      fontWeight: 700,
+      fontSize: 18,
+      lineHeight: 1,
+      padding: "0.15rem 0.65rem",
+      minWidth: 36,
+      minHeight: 36,
+      cursor: "pointer",
+    };
+
+    const renderStepperField = ({
+      label,
+      value,
+      min,
+      onChange = () => {},
+    }) => {
+      const parseNumeric = (val) => {
+        const num = Number(val);
+        return Number.isNaN(num) ? null : num;
+      };
+      const resolveInitial = () =>
+        typeof min === "number" ? min : 0;
+      const handleStep = (direction) => {
+        const parsed = parseNumeric(value);
+        let nextValue =
+          parsed === null ? resolveInitial() : parsed + direction;
+        if (typeof min === "number") {
+          nextValue = Math.max(min, nextValue);
+        }
+        onChange(String(nextValue));
+      };
+      const resolvedValue =
+        value === null || typeof value === "undefined" ? "" : value;
+      return Field({
+        label,
+        labelAlign: "center",
+        children: React.createElement(
+          "div",
+          {
+            className: "ui-stepper",
+            style: {
+              display: "grid",
+              gridTemplateColumns: "auto 1fr auto",
+              gap: 8,
+              alignItems: "center",
+            },
+          },
+          [
+            React.createElement(
+              "button",
+              {
+                type: "button",
+                "aria-label": `Decrease ${label}`,
+                onClick: () => handleStep(-1),
+                style: stepperButtonStyle,
+              },
+              "−"
+            ),
+            React.createElement(
+              "input",
+              Object.assign(
+                {
+                  className: "ui-input",
+                  type: "text",
+                  value: resolvedValue,
+                  onChange: (e) => onChange(e.target.value),
+                  style: { textAlign: "center" },
+                },
+                mobileNumberProps
+              )
+            ),
+            React.createElement(
+              "button",
+              {
+                type: "button",
+                "aria-label": `Increase ${label}`,
+                onClick: () => handleStep(1),
+                style: stepperButtonStyle,
+              },
+              "+"
+            ),
+          ]
+        ),
+      });
+    };
 
     const hpCard = Card({
       children: React.createElement(
         "div",
         { className: "grid gap-3" },
         React.createElement("div", { className: "ui-label" }, "Combat Vitals"),
+        React.createElement(
+          "div",
+          {
+            style: {
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 8,
+            },
+          },
+          [
+            React.createElement(
+              Btn,
+              { key: "short", type: "button", onClick: onShortRest },
+              "Short Rest"
+            ),
+            React.createElement(
+              Btn,
+              {
+                key: "long",
+                type: "button",
+                onClick: onLongRest,
+              },
+              "Long Rest"
+            ),
+          ]
+        ),
         React.createElement(
           "div",
           {
@@ -45,67 +162,29 @@
               ),
             },
           },
-          Field({
+          renderStepperField({
             label: "Armor Class",
-            children: React.createElement(
-              "input",
-              Object.assign(
-                {
-                  className: "ui-input",
-                  type: "number",
-                  min: 1,
-                  value: sheet.ac,
-                  onChange: (e) => onAcChange(e.target.value),
-                },
-                mobileNumberProps
-              )
-            ),
+            value: sheet.ac,
+            min: 1,
+            onChange: onAcChange,
           }),
-          Field({
+          renderStepperField({
             label: "Max HP",
-            children: React.createElement(
-              "input",
-              Object.assign(
-                {
-                  className: "ui-input",
-                  type: "number",
-                  min: 1,
-                  value: sheet.hp?.max ?? 0,
-                  onChange: (e) => onHpChange("max", e.target.value),
-                },
-                mobileNumberProps
-              )
-            ),
+            value: sheet.hp?.max ?? 0,
+            min: 1,
+            onChange: (next) => onHpChange("max", next),
           }),
-          Field({
+          renderStepperField({
             label: "Current HP",
-            children: React.createElement(
-              "input",
-              Object.assign(
-                {
-                  className: "ui-input",
-                  type: "number",
-                  value: sheet.hp?.current ?? 0,
-                  onChange: (e) => onHpChange("current", e.target.value),
-                },
-                mobileNumberProps
-              )
-            ),
+            value: sheet.hp?.current ?? 0,
+            min: 0,
+            onChange: (next) => onHpChange("current", next),
           }),
-          Field({
+          renderStepperField({
             label: "Temp HP",
-            children: React.createElement(
-              "input",
-              Object.assign(
-                {
-                  className: "ui-input",
-                  type: "number",
-                  value: sheet.hp?.temp ?? 0,
-                  onChange: (e) => onHpChange("temp", e.target.value),
-                },
-                mobileNumberProps
-              )
-            ),
+            value: sheet.hp?.temp ?? 0,
+            min: 0,
+            onChange: (next) => onHpChange("temp", next),
           })
         )
       ),
@@ -189,7 +268,7 @@
                       ? React.createElement(
                           "span",
                           { className: "tag", style: { fontSize: 12 } },
-                          `Ã—${weapon.qty}`
+                          `x${weapon.qty}`
                         )
                       : null
                   ),

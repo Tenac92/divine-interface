@@ -69,23 +69,47 @@
       { ...rest, className: ["btn", className].filter(Boolean).join(" ") },
       children
     );
-  const Field = ({ label, hint, children }) =>
-    React.createElement(
+  const Field = ({
+    label,
+    hint,
+    children,
+    labelAlign,
+    labelClassName = "",
+    labelStyle = null,
+  }) => {
+    const combinedLabelClass = ["ui-label", labelClassName]
+      .filter(Boolean)
+      .join(" ");
+    const combinedLabelStyle = labelAlign
+      ? { ...(labelStyle || {}), textAlign: labelAlign }
+      : labelStyle;
+    return React.createElement(
       "label",
       { className: "ui-field" },
       label
-        ? React.createElement("span", { className: "ui-label" }, label)
+        ? React.createElement(
+            "span",
+            { className: combinedLabelClass, style: combinedLabelStyle || undefined },
+            label
+          )
         : null,
       children,
       hint
         ? React.createElement("span", { className: "ui-hint" }, hint)
         : null
     );
+  };
 
 
 
   // ---------- Component ----------
-  function SheetPage() {
+  function SheetPage(props) {
+    const {
+      initialTab = "overview",
+      lockedTab = null,
+      hideTabs = false,
+    } = props || {};
+    const initialTabId = lockedTab || initialTab || "overview";
     const session = getSessionSafe();
 
     if (!session || !session.username) {
@@ -110,12 +134,13 @@
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [dirty, setDirty] = useState(false);
-    const [activeTab, setActiveTab] = useState("overview");
+    const [activeTab, setActiveTab] = useState(initialTabId);
     const [errors, setErrors] = useState([]);
     const [isCompact, setIsCompact] = useState(() => {
       if (typeof window === "undefined" || !window.matchMedia) return false;
       return window.matchMedia("(max-width: 768px)").matches;
     });
+    const [restDialog, setRestDialog] = useState(null);
     const catalog = AppNS.Catalog || {};
     const hasClassCatalog = typeof catalog.listClasses === "function";
     const hasSpeciesCatalog = typeof catalog.listSpecies === "function";
@@ -179,6 +204,11 @@
     const [collapsedSpellLevels, setCollapsedSpellLevels] = useState({});
     const [openSpellEditors, setOpenSpellEditors] = useState({});
     const autosaveTimerRef = useRef(null);
+    useEffect(() => {
+      if (lockedTab) {
+        setActiveTab(lockedTab);
+      }
+    }, [lockedTab]);
 
     const { results: weaponResults, loading: weaponLoading } =
       useWeaponCatalogHook({
@@ -262,28 +292,122 @@
       });
     };
 
+    const isBlankNumericInput = (val) =>
+      val === "" || val === null || typeof val === "undefined";
+
     const handleAcChange = (value) => {
-      updateSheet((prev) => ({
-        ...prev,
-        ac: Math.max(1, Number(value) || 1),
-      }));
+      updateSheet((prev) => {
+        if (isBlankNumericInput(value)) {
+          return { ...prev, ac: "" };
+        }
+        const numeric = Number(value);
+        if (Number.isNaN(numeric)) {
+          return prev;
+        }
+        return {
+          ...prev,
+          ac: Math.max(1, numeric),
+        };
+      });
     };
 
     const handleHpFieldChange = (field, value) => {
       updateSheet((prev) => {
+        const prevHp = prev.hp || {};
+        if (isBlankNumericInput(value)) {
+          return {
+            ...prev,
+            hp: {
+              ...prevHp,
+              [field]: "",
+            },
+          };
+        }
         const numeric = Number(value);
+        if (Number.isNaN(numeric)) {
+          return prev;
+        }
         const nextValue =
-          field === "max"
-            ? Math.max(1, numeric || 1)
-            : Math.max(0, numeric || 0);
+          field === "max" ? Math.max(1, numeric) : Math.max(0, numeric);
         return {
           ...prev,
           hp: {
-            ...prev.hp,
+            ...prevHp,
             [field]: nextValue,
           },
         };
       });
+    };
+
+    const getNumericHp = (value, fallback = 0) => {
+      const numeric = Number(value);
+      return Number.isFinite(numeric) ? numeric : fallback;
+    };
+
+    const applyShortRest = (recovered) => {
+      if (!Number.isFinite(recovered) || recovered <= 0) {
+        AppNS.toast &&
+          AppNS.toast("Enter a positive HP amount to recover.");
+        return;
+      }
+      updateSheet((prev) => {
+        const hp = prev.hp || {};
+        const rawMax = getNumericHp(hp.max, null);
+        const cap = rawMax == null ? null : Math.max(0, rawMax);
+        const current = Math.max(0, getNumericHp(hp.current));
+        const nextCurrent =
+          cap == null ? current + recovered : Math.min(cap, current + recovered);
+        return {
+          ...prev,
+          hp: {
+            ...hp,
+            current: nextCurrent,
+          },
+        };
+      });
+      AppNS.toast && AppNS.toast("Short rest applied.");
+    };
+
+    const applyLongRest = () => {
+      updateSheet((prev) => {
+        const hp = prev.hp || {};
+        const rawMax = getNumericHp(hp.max, null);
+        const fallbackCurrent = Math.max(0, getNumericHp(hp.current));
+        const nextCurrent =
+          rawMax == null ? fallbackCurrent : Math.max(0, rawMax);
+        return {
+          ...prev,
+          hp: {
+            ...hp,
+            current: nextCurrent,
+            temp: 0,
+          },
+        };
+      });
+      AppNS.toast && AppNS.toast("Long rest applied.");
+    };
+
+    const openShortRestDialog = () =>
+      setRestDialog({ type: "short", amount: "" });
+    const openLongRestDialog = () => setRestDialog({ type: "long" });
+    const closeRestDialog = () => setRestDialog(null);
+
+    const submitShortRest = () => {
+      if (restDialog?.type !== "short") return;
+      const recovered = Number(restDialog.amount);
+      if (!Number.isFinite(recovered) || recovered <= 0) {
+        AppNS.toast &&
+          AppNS.toast("Enter a positive HP amount to recover.");
+        return;
+      }
+      applyShortRest(recovered);
+      closeRestDialog();
+    };
+
+    const submitLongRest = () => {
+      if (restDialog?.type !== "long") return;
+      applyLongRest();
+      closeRestDialog();
     };
 
     const saveChanges = useCallback(
@@ -1314,6 +1438,8 @@
           onResetSpellSlot: resetSpellSlotUsage,
           onPreparedSpellClick: handlePreparedSpellClick,
           weaponItems,
+          onShortRest: openShortRestDialog,
+          onLongRest: openLongRestDialog,
         })
       : Card({
           children: React.createElement(
@@ -2274,7 +2400,7 @@
           }),
         });
 
-    const tabs = [
+    const baseTabs = [
       { id: "overview", label: "Overview", node: overviewTab },
       { id: "combat", label: "Combat", node: combatTab },
       { id: "abilities", label: "Abilities", node: abilitiesTab },
@@ -2306,10 +2432,27 @@
       },
     ];
 
-    const activeContent =
-      tabs.find((tab) => tab.id === activeTab)?.node || overviewTab;
+    const tabPool =
+      lockedTab === "combat"
+        ? baseTabs
+        : baseTabs.filter((tab) => tab.id !== "combat");
 
-    const tabNav = isCompact
+    const visibleTabs = lockedTab
+      ? tabPool.filter((tab) => tab.id === lockedTab)
+      : tabPool;
+    const resolvedTabId = lockedTab || activeTab;
+    const activeContent =
+      tabPool.find((tab) => tab.id === resolvedTabId)?.node || overviewTab;
+    const showTabNav = !hideTabs && visibleTabs.length > 1;
+
+    const handleTabChange = (next) => {
+      if (lockedTab || next === activeTab) return;
+      setActiveTab(next);
+    };
+
+    const tabNav = !showTabNav
+      ? null
+      : isCompact
       ? Card({
           className: "sheet-tab-picker",
           children: Field({
@@ -2318,10 +2461,10 @@
               "select",
               {
                 className: "ui-select",
-                value: activeTab,
-                onChange: (e) => setActiveTab(e.target.value),
+                value: resolvedTabId,
+                onChange: (e) => handleTabChange(e.target.value),
               },
-              tabs.map((tab) =>
+              visibleTabs.map((tab) =>
                 React.createElement(
                   "option",
                   { key: tab.id, value: tab.id },
@@ -2334,15 +2477,15 @@
       : React.createElement(
           "div",
           { className: "tab-bar sheet-tab-scroll" },
-          tabs.map((tab) =>
+          visibleTabs.map((tab) =>
             React.createElement(
               "button",
               {
                 key: tab.id,
                 className: `tab-btn px-4 py-2 ${
-                  activeTab === tab.id ? "tab-btn-active" : ""
+                  resolvedTabId === tab.id ? "tab-btn-active" : ""
                 }`,
-                onClick: () => setActiveTab(tab.id),
+                onClick: () => handleTabChange(tab.id),
               },
               [
                 tab.label,
@@ -2358,18 +2501,210 @@
           )
         );
 
+    const restDialogContent = !restDialog
+      ? null
+      : restDialog.type === "short"
+      ? React.createElement(
+          "div",
+          { className: "grid gap-4" },
+          React.createElement(
+            "div",
+            {
+              style: {
+                fontWeight: 600,
+                fontSize: "1.15rem",
+                textAlign: "center",
+              },
+            },
+            "Short Rest"
+          ),
+          React.createElement(
+            "p",
+            {
+              className: "ui-hint",
+              style: { textAlign: "center", textTransform: "none" },
+            },
+            "Enter how many hit points were recovered during the short rest."
+          ),
+          Field({
+            label: "HP Restored",
+            labelAlign: "center",
+            children: React.createElement(
+              "input",
+              Object.assign(
+                {
+                  className: "ui-input",
+                  type: "text",
+                  value: restDialog?.amount ?? "",
+                  onChange: (e) =>
+                    setRestDialog((prev) =>
+                      prev?.type === "short"
+                        ? { ...prev, amount: e.target.value }
+                        : prev
+                    ),
+                  placeholder: "e.g. 7",
+                  style: { textAlign: "center" },
+                  onKeyDown: (e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      submitShortRest();
+                    }
+                  },
+                },
+                MOBILE_NUMBER_PROPS
+              )
+            ),
+          }),
+          React.createElement(
+            "div",
+            {
+              style: {
+                display: "grid",
+                gap: 8,
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              },
+            },
+            React.createElement(
+              Btn,
+              {
+                type: "button",
+                className: "btn-primary",
+                onClick: submitShortRest,
+              },
+              "Apply"
+            ),
+            React.createElement(
+              Btn,
+              {
+                type: "button",
+                className: "btn-muted",
+                onClick: closeRestDialog,
+              },
+              "Cancel"
+            )
+          )
+        )
+      : React.createElement(
+          "div",
+          { className: "grid gap-4" },
+          React.createElement(
+            "div",
+            {
+              style: {
+                fontWeight: 600,
+                fontSize: "1.15rem",
+                textAlign: "center",
+              },
+            },
+            "Long Rest"
+          ),
+          React.createElement(
+            "p",
+            {
+              className: "ui-hint",
+              style: { textAlign: "center", textTransform: "none" },
+            },
+            "Restore current HP to its maximum value and clear any temporary HP."
+          ),
+          React.createElement(
+            "p",
+            {
+              className: "ui-hint",
+              style: {
+                textAlign: "center",
+                textTransform: "none",
+                fontSize: "0.85rem",
+              },
+            },
+            "Spell slots and other resources are not adjusted automatically."
+          ),
+          React.createElement(
+            "div",
+            {
+              style: {
+                display: "grid",
+                gap: 8,
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              },
+            },
+            React.createElement(
+              Btn,
+              {
+                type: "button",
+                className: "btn-primary",
+                onClick: submitLongRest,
+              },
+              "Confirm"
+            ),
+            React.createElement(
+              Btn,
+              {
+                type: "button",
+                className: "btn-muted",
+                onClick: closeRestDialog,
+              },
+              "Cancel"
+            )
+          )
+        );
+
+    const restDialogNode = !restDialog
+      ? null
+      : React.createElement(
+          "div",
+          {
+            style: {
+              position: "fixed",
+              inset: 0,
+              background: "rgba(2, 6, 23, 0.65)",
+              backdropFilter: "blur(2px)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "1.5rem",
+              zIndex: 1000,
+            },
+            onClick: (event) => {
+              if (event.target === event.currentTarget) {
+                closeRestDialog();
+              }
+            },
+          },
+          Card({
+            style: { maxWidth: 360, width: "100%" },
+            children: restDialogContent,
+          })
+        );
+
     return React.createElement(
-      "div",
-      { className: "grid gap-4" },
-      heroCard,
-      errorBanner,
-      autosaveStatus,
-      tabNav,
-      activeContent
+      React.Fragment,
+      null,
+      restDialogNode,
+      React.createElement(
+        "div",
+        { className: "grid gap-4" },
+        heroCard,
+        errorBanner,
+        autosaveStatus,
+        tabNav,
+        activeContent
+      )
+    );
+  }
+
+  function CombatPage(props) {
+    return React.createElement(
+      SheetPage,
+      Object.assign({}, props, {
+        initialTab: "combat",
+        lockedTab: "combat",
+        hideTabs: true,
+      })
     );
   }
 
   AppNS.SheetPage = SheetPage;
+  AppNS.CombatPage = CombatPage;
 })();
 
 

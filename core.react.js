@@ -180,6 +180,8 @@
         "nav",
         { className: "flex items-center gap-2 flex-wrap" },
         isLoggedIn && React.createElement(NavLink, { to: "/sheet" }, "Sheet"),
+        isLoggedIn &&
+          React.createElement(NavLink, { to: "/combat" }, "Combat"),
         isLoggedIn && React.createElement(NavLink, { to: "/store" }, "Store"),
         isLoggedIn &&
           isAdmin &&
@@ -342,6 +344,13 @@
                 "Only administrators can open the control panel."
               )
             );
+    } else if (path === "/combat") {
+      const CombatPage = AppNS.CombatPage || AppNS.SheetPage;
+      const combatProps =
+        CombatPage === AppNS.SheetPage
+          ? { initialTab: "combat", lockedTab: "combat", hideTabs: true }
+          : null;
+      pageEl = React.createElement(CombatPage, combatProps);
     } else if (path === "/store") {
       pageEl = React.createElement(AppNS.StorePage);
     } else {

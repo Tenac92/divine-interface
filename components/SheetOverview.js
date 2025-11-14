@@ -263,7 +263,7 @@
                   `item-${index}`;
                 const qtyLabel =
                   item.qty !== undefined && item.qty !== ""
-                    ? `×${item.qty}`
+                    ? `x${item.qty}`
                     : null;
                 return React.createElement(
                   "li",
