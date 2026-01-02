@@ -183,6 +183,7 @@
         isLoggedIn &&
           React.createElement(NavLink, { to: "/combat" }, "Combat"),
         isLoggedIn && React.createElement(NavLink, { to: "/store" }, "Store"),
+        isLoggedIn && React.createElement(NavLink, { to: "/map" }, "Map"),
         isLoggedIn &&
           isAdmin &&
           React.createElement(NavLink, { to: "/admin" }, "Admin"),
@@ -353,6 +354,23 @@
       pageEl = React.createElement(CombatPage, combatProps);
     } else if (path === "/store") {
       pageEl = React.createElement(AppNS.StorePage);
+    } else if (path === "/map") {
+      pageEl = AppNS.MapPage
+        ? React.createElement(AppNS.MapPage)
+        : React.createElement(
+            "div",
+            { className: "card max-w-lg mx-auto" },
+            React.createElement(
+              "h2",
+              { className: "text-lg font-semibold mb-2" },
+              "Map loading"
+            ),
+            React.createElement(
+              "p",
+              { className: "text-sm opacity-75" },
+              "The map module hasn't loaded yet. Refresh the page to retry."
+            )
+          );
     } else {
       pageEl = React.createElement(AppNS.SheetPage); // default /sheet
     }

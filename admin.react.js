@@ -5,6 +5,7 @@
   const supa = AppNS.supabase || null;
   const RemoteStore = window.RemoteStore || null;
   const hasRemote = !!RemoteStore;
+  const MapStore = AppNS.MapStore || null;
 
   const LS_USERS = "di.users.local.v1";
   const LS_PROFILES = "di.store.profiles.v1";
@@ -44,6 +45,18 @@
     lock: false,
     sheet: null,
   });
+  const formatBytes = (value) => {
+    if (!value || Number.isNaN(value)) return "n/a";
+    if (value < 1024) return `${value} B`;
+    if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`;
+    return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+  };
+  const formatDate = (value) => {
+    if (!value) return "n/a";
+    const dt = new Date(value);
+    if (Number.isNaN(dt.getTime())) return String(value);
+    return dt.toLocaleDateString();
+  };
 
   async function loadUsersAny() {
     if (hasRemote) {
@@ -147,6 +160,15 @@
     const [profileFilter, setProfileFilter] = useState("");
     const [profileSaving, setProfileSaving] = useState(false);
 
+    const [mapsLoading, setMapsLoading] = useState(true);
+    const [maps, setMaps] = useState([]);
+    const [mapError, setMapError] = useState(null);
+    const [mapName, setMapName] = useState("");
+    const [mapFile, setMapFile] = useState(null);
+    const [mapUploading, setMapUploading] = useState(false);
+    const [mapRenames, setMapRenames] = useState({});
+    const [defaultMapId, setDefaultMapId] = useState(null);
+
     const [newUser, setNewUser] = useState({
       username: "",
       password: "",
@@ -156,6 +178,7 @@
     useEffect(() => {
       refreshUsers();
       refreshProfiles();
+      refreshMaps();
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -176,6 +199,83 @@
       arr.sort((a, b) => a.owner.localeCompare(b.owner));
       setProfiles(arr);
       setLoadingProfiles(false);
+    }
+
+    async function refreshMaps() {
+      if (!MapStore) {
+        setMaps([]);
+        setMapsLoading(false);
+        setDefaultMapId(null);
+        return;
+      }
+      setMapsLoading(true);
+      setMapError(null);
+      try {
+        if (MapStore.refreshRemoteList) {
+          await MapStore.refreshRemoteList();
+        }
+        const list = MapStore.listMaps();
+        list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+        setMaps(list);
+        setDefaultMapId(MapStore.getDefaultMapId());
+      } catch (err) {
+        setMapError(err?.message || "Failed to load maps.");
+      } finally {
+        setMapsLoading(false);
+      }
+    }
+
+    async function handleMapUpload() {
+      if (!MapStore) return;
+      if (!mapFile) {
+        setMapError("Select a JSON file to upload.");
+        return;
+      }
+      try {
+        setMapUploading(true);
+        setMapError(null);
+        await MapStore.importMapFile(mapFile, mapName);
+        setMapName("");
+        setMapFile(null);
+        await refreshMaps();
+      } catch (err) {
+        setMapError(err?.message || "Failed to upload map.");
+      } finally {
+        setMapUploading(false);
+      }
+    }
+
+    async function handleMapRename(id) {
+      if (!MapStore) return;
+      const nextName = mapRenames[id];
+      if (!nextName) return;
+      try {
+        await MapStore.updateMapName(id, nextName);
+      } catch (err) {
+        setMapError(err?.message || "Failed to rename map.");
+      }
+      setMapRenames((prev) => ({ ...prev, [id]: "" }));
+      await refreshMaps();
+    }
+
+    async function handleMapDelete(id) {
+      if (!MapStore) return;
+      try {
+        await MapStore.removeMap(id);
+      } catch (err) {
+        setMapError(err?.message || "Failed to remove map.");
+      }
+      await refreshMaps();
+    }
+
+    async function handleMapDefault(id) {
+      if (!MapStore) return;
+      try {
+        setDefaultMapId(await MapStore.setDefaultMap(id));
+      } catch (err) {
+        setMapError(err?.message || "Failed to set default map.");
+      }
+      await refreshMaps();
     }
 
     const filteredUsers = useMemo(() => {
@@ -217,6 +317,107 @@
       );
       return { totalUsers, adminCount, playerCount, lockedProfiles, totalFP };
     }, [users, profiles]);
+
+    const mapCards =
+      mapsLoading
+        ? Card({
+            className: "grid gap-2",
+            children: "Loading maps...",
+          })
+        : maps.length === 0
+        ? Card({
+            className: "grid gap-2",
+            children: "No maps available.",
+          })
+        : React.createElement(
+            "div",
+            { className: "grid gap-2" },
+            maps.map((entry) => {
+              const isDefault = entry.id === defaultMapId;
+              const isBuiltin = entry.source === "builtin";
+              return Card({
+                key: entry.id,
+                className: "grid gap-2",
+                children: React.createElement(
+                  React.Fragment,
+                  null,
+                  React.createElement(
+                    "div",
+                    {
+                      style: {
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                        gap: 8,
+                      },
+                    },
+                    React.createElement(
+                      "div",
+                      { style: { fontWeight: 600 } },
+                      entry.name || entry.id
+                    ),
+                    React.createElement(
+                      "div",
+                      { style: { display: "flex", gap: 6, flexWrap: "wrap" } },
+                      React.createElement(
+                        "span",
+                        { className: "tag" },
+                        isBuiltin ? "Built-in" : "Local"
+                      ),
+                      isDefault &&
+                        React.createElement("span", { className: "tag" }, "Default")
+                    )
+                  ),
+                  React.createElement(
+                    "div",
+                    { className: "ui-hint" },
+                    "Updated: ",
+                    formatDate(entry.updatedAt),
+                    " | Size: ",
+                    formatBytes(entry.size)
+                  ),
+                  React.createElement(
+                    "div",
+                    { className: "grid gap-2" },
+                    React.createElement("input", {
+                      className: "ui-input",
+                      placeholder: "Rename map",
+                      value: mapRenames[entry.id] || "",
+                      onChange: (e) =>
+                        setMapRenames((prev) => ({
+                          ...prev,
+                          [entry.id]: e.target.value,
+                        })),
+                    }),
+                    React.createElement(
+                      "div",
+                      { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
+                      Btn({
+                        type: "button",
+                        onClick: () => handleMapRename(entry.id),
+                        disabled: !(mapRenames[entry.id] || "").trim(),
+                        children: "Rename",
+                      }),
+                      Btn({
+                        type: "button",
+                        onClick: () => handleMapDefault(entry.id),
+                        className: "btn-muted",
+                        children: "Set default",
+                      }),
+                      Btn({
+                        type: "button",
+                        onClick: () => handleMapDelete(entry.id),
+                        className: "btn-muted",
+                        disabled: isBuiltin,
+                        children: isBuiltin ? "Built-in" : "Delete",
+                      })
+                    )
+                  )
+                ),
+              });
+            })
+          );
 
     const userCards =
       filteredUsers.length === 0
@@ -778,6 +979,72 @@
       "div",
       { className: "grid gap-4" },
       heroCard,
+      Card({
+        className: "grid gap-3",
+        children: React.createElement(
+          React.Fragment,
+          null,
+          React.createElement("h2", { style: { fontWeight: 600 } }, "Map library"),
+          MapStore
+            ? React.createElement(
+                React.Fragment,
+                null,
+                Field({
+                  label: "Map name",
+                  hint: "Optional. If blank, we use the name inside the JSON.",
+                  children: React.createElement("input", {
+                    className: "ui-input",
+                    value: mapName,
+                    onChange: (e) => setMapName(e.target.value),
+                    placeholder: "Seraphin Basin - Night Variant",
+                  }),
+                }),
+                Field({
+                  label: "Upload map JSON",
+                  hint: "Admins can add multiple maps to the library.",
+                  children: React.createElement("input", {
+                    className: "ui-input",
+                    type: "file",
+                    accept: ".json,application/json",
+                    onChange: (e) =>
+                      setMapFile(e.target.files ? e.target.files[0] : null),
+                  }),
+                }),
+                React.createElement(
+                  "div",
+                  { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
+                  Btn({
+                    type: "button",
+                    className: "btn-primary",
+                    onClick: handleMapUpload,
+                    disabled: mapUploading || !mapFile,
+                    children: mapUploading ? "Uploading..." : "Upload map",
+                  }),
+                  Btn({
+                    type: "button",
+                    className: "btn-muted",
+                    onClick: refreshMaps,
+                    children: "Refresh list",
+                  })
+                ),
+                mapError &&
+                  React.createElement(
+                    "div",
+                    {
+                      className:
+                        "text-sm border border-red-400/40 bg-red-500/10 text-red-100 rounded-lg p-3",
+                    },
+                    mapError
+                  ),
+                mapCards
+              )
+            : React.createElement(
+                "div",
+                { className: "ui-hint" },
+                "Map library is not available in this session."
+              )
+        ),
+      }),
       Card({
         className: "grid gap-3",
         children: React.createElement(
