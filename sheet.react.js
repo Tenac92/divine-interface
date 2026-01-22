@@ -48,6 +48,7 @@
   const InventoryComponent = SheetComponents.Inventory;
   const SpellsComponent = SheetComponents.Spells;
   const NotesComponent = SheetComponents.Notes;
+  const FeaturesComponent = SheetComponents.Features;
   const AUTOSAVE_DELAY_MS = 2500;
   const MOBILE_NUMBER_PROPS = {
     inputMode: "numeric",
@@ -99,8 +100,61 @@
         : null
     );
   };
+  const slugifyClassName = (value) =>
+    (value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
 
+  const toTitleCase = (value) =>
+    (value || "")
+      .trim()
+      .replace(/[-_]+/g, " ")
+      .replace(/\s+/g, " ")
+      .replace(/\b\w/g, (ch) => ch.toUpperCase());
 
+  const slotLabelFromKey = (key) => {
+    const text = String(key || "").trim();
+    if (!text) return "";
+    if (/^\d+$/.test(text)) {
+      return `Level ${Number(text)} Slots`;
+    }
+    return toTitleCase(text);
+  };
+
+  const DEFAULT_SUBCLASS_UNLOCK_LEVEL = 3;
+  const SUBCLASS_UNLOCK_LEVELS = {
+    cleric: 1,
+    sorcerer: 1,
+    warlock: 1,
+    druid: 2,
+    wizard: 2,
+  };
+  const SUBCLASS_SLUG_HINT = /subclass|domain|circle|oath|tradition|college|patron|order|path|school/i;
+  const deriveSubclassUnlockLevel = (rows = []) => {
+    if (!Array.isArray(rows) || !rows.length) return null;
+    return rows.reduce((closest, row) => {
+      const level = Number(row?.level);
+      if (!Number.isFinite(level) || level < 1) return closest;
+      const notes = String(row?.notes || "").toLowerCase();
+      const slugs = Array.isArray(row?.feature_slugs) ? row.feature_slugs : [];
+      const hintFromNotes = notes.includes("subclass");
+      const hintFromSlugs = slugs.some((slug) =>
+        SUBCLASS_SLUG_HINT.test(String(slug || ""))
+      );
+      if (!hintFromNotes && !hintFromSlugs) return closest;
+      if (closest == null) return level;
+      return Math.min(closest, level);
+    }, null);
+  };
+  const resolveSubclassUnlockLevel = (rows, slug) => {
+    const derived = deriveSubclassUnlockLevel(rows);
+    if (Number.isFinite(derived) && derived >= 1) return derived;
+    const keyed = SUBCLASS_UNLOCK_LEVELS[slug];
+    if (Number.isFinite(keyed) && keyed >= 1) return keyed;
+    return DEFAULT_SUBCLASS_UNLOCK_LEVEL;
+  };
 
   // ---------- Component ----------
   function SheetPage(props) {
@@ -172,6 +226,18 @@
       function useSpellCatalogFallback() {
         return { results: [], loading: false };
       };
+    const useClassFeaturesHook =
+      HooksAPI.useClassFeatures ||
+      function useClassFeaturesFallback() {
+        return {
+          status: "unsupported",
+          supportsApi: false,
+          progression: [],
+          featureIndex: new Map(),
+          error: null,
+          refresh: () => {},
+        };
+      };
 
     const classOptions = useClassCatalogHook({
       catalog,
@@ -203,7 +269,12 @@
     const [spellListSearch, setSpellListSearch] = useState("");
     const [collapsedSpellLevels, setCollapsedSpellLevels] = useState({});
     const [openSpellEditors, setOpenSpellEditors] = useState({});
+    const classSlug = useMemo(
+      () => slugifyClassName(sheet.className),
+      [sheet.className]
+    );
     const autosaveTimerRef = useRef(null);
+    const lastSlotSyncKeyRef = useRef(null);
     useEffect(() => {
       if (lockedTab) {
         setActiveTab(lockedTab);
@@ -227,6 +298,76 @@
       spellCatalogConcentration,
       sheetClassName: sheet.className,
     });
+
+    const classFeatures = useClassFeaturesHook({
+      catalog,
+      classSlug,
+      subclassSlug: sheet.subclass?.slug || "",
+      enabled: !!classSlug,
+    });
+    const classProgressionRows = classFeatures?.progression || [];
+    const classFeaturesStatus = classFeatures?.status || "idle";
+    const availableSubclasses = Array.isArray(classFeatures?.subclasses)
+      ? classFeatures.subclasses
+      : [];
+    const subclassFeatures = Array.isArray(classFeatures?.subclassFeatures)
+      ? classFeatures.subclassFeatures
+      : [];
+    const classLevelData = useMemo(() => {
+      if (!classProgressionRows.length) return null;
+      const targetLevel = Number(sheet.level) || 1;
+      return (
+        classProgressionRows.find(
+          (row) => Number(row?.level) === targetLevel
+        ) || null
+      );
+    }, [classProgressionRows, sheet.level]);
+    const classSpellSlotEntries = useMemo(() => {
+      if (!classLevelData || !classLevelData.spell_slots) return [];
+      const entries = Object.entries(classLevelData.spell_slots || {});
+      return entries
+        .filter(
+          ([, value]) => value !== null && value !== undefined && value !== ""
+        )
+        .map(([key, value]) => {
+          const numeric = /^\d+$/.test(String(key || ""));
+          return {
+            key,
+            label: slotLabelFromKey(key),
+            value: String(value),
+            numeric,
+            numericLevel: numeric ? Number(key) : null,
+          };
+        })
+        .sort((a, b) => {
+          if (a.numeric && b.numeric) {
+            return (a.numericLevel || 0) - (b.numericLevel || 0);
+          }
+          if (a.numeric) return -1;
+          if (b.numeric) return 1;
+          return a.label.localeCompare(b.label);
+        });
+    }, [classLevelData?.spell_slots]);
+    const referenceSpellSlotTotals = useMemo(() => {
+      const numericEntries = classSpellSlotEntries.filter(
+        (entry) => entry.numeric && Number.isFinite(entry.numericLevel)
+      );
+      if (!numericEntries.length) return null;
+      let hasValue = false;
+      const totals = Array.from({ length: 10 }, () => 0);
+      numericEntries.forEach((entry) => {
+        const lvl = Math.max(0, Math.min(9, entry.numericLevel || 0));
+        const total = Number(entry.value) || 0;
+        totals[lvl] = total;
+        if (total > 0) hasValue = true;
+      });
+      return hasValue ? totals : null;
+    }, [classSpellSlotEntries]);
+    const subclassUnlockLevel = useMemo(
+      () => resolveSubclassUnlockLevel(classProgressionRows, classSlug),
+      [classProgressionRows, classSlug]
+    );
+    const levelUnlocksSubclass = (Number(sheet.level) || 1) >= subclassUnlockLevel;
 
     useEffect(() => {
       if (typeof window === "undefined" || !window.matchMedia) return undefined;
@@ -291,6 +432,97 @@
         return next;
       });
     };
+
+    useEffect(() => {
+      if (!sheet.subclass) return;
+      const lvl = Number(sheet.level) || 1;
+      if (!classSlug) {
+        updateSheet((prev) => {
+          if (!prev.subclass) return prev;
+          return { ...prev, subclass: null };
+        });
+        return;
+      }
+      if (classFeaturesStatus !== "ready") {
+        return;
+      }
+      if (!levelUnlocksSubclass || lvl < (subclassUnlockLevel || 1)) {
+        updateSheet((prev) => {
+          if (!prev.subclass) return prev;
+          return { ...prev, subclass: null };
+        });
+        return;
+      }
+      const exists = availableSubclasses.some(
+        (sub) => sub?.subclass_slug === sheet.subclass?.slug
+      );
+      if (!exists) {
+        updateSheet((prev) => {
+          if (!prev.subclass) return prev;
+          return { ...prev, subclass: null };
+        });
+      }
+    }, [
+      sheet.subclass,
+      sheet.level,
+      classSlug,
+      availableSubclasses,
+      updateSheet,
+      classFeaturesStatus,
+      levelUnlocksSubclass,
+      subclassUnlockLevel,
+    ]);
+
+    const handleSubclassSelect = useCallback(
+      (slug) => {
+        if (!slug) {
+          updateSheet((prev) => {
+            if (!prev.subclass) return prev;
+            return { ...prev, subclass: null };
+          });
+          return;
+        }
+        const match = availableSubclasses.find(
+          (sub) => sub?.subclass_slug === slug
+        );
+        if (!match) return;
+        updateSheet((prev) => ({
+          ...prev,
+          subclass: {
+            slug: match.subclass_slug,
+            title: match.title || toTitleCase(match.subclass_slug),
+          },
+        }));
+      },
+      [availableSubclasses, updateSheet]
+    );
+
+    const syncSpellSlotsFromClass = useCallback(() => {
+      if (!referenceSpellSlotTotals) return;
+      updateSheet((prev) => {
+        const normalized = normalizeSpellSlots(prev.spellSlots);
+        const next = normalized.map((slot, index) => {
+          if (index === 0) return slot;
+          const total = referenceSpellSlotTotals[index] || 0;
+          const used = Math.min(slot.used || 0, total);
+          return { total, used };
+        });
+        return { ...prev, spellSlots: next };
+      });
+    }, [referenceSpellSlotTotals, updateSheet]);
+
+    useEffect(() => {
+      if (!referenceSpellSlotTotals) return;
+      const key = `${classSlug || "none"}:${sheet.level}`;
+      if (lastSlotSyncKeyRef.current === key) return;
+      lastSlotSyncKeyRef.current = key;
+      syncSpellSlotsFromClass();
+    }, [
+      classSlug,
+      sheet.level,
+      referenceSpellSlotTotals,
+      syncSpellSlotsFromClass,
+    ]);
 
     const isBlankNumericInput = (val) =>
       val === "" || val === null || typeof val === "undefined";
@@ -448,7 +680,13 @@
     const gridCols = (desktopPattern) =>
       isCompact ? "1fr" : desktopPattern;
     const proficientCount = useMemo(
-      () => Object.values(sheet.skills || {}).filter(Boolean).length,
+      () =>
+        Object.values(sheet.skills || {}).filter((value) => {
+          if (value === "expertise") return true;
+          if (value === true) return true;
+          const numeric = Number(value);
+          return Number.isFinite(numeric) ? numeric >= 1 : false;
+        }).length,
       [sheet.skills]
     );
     const preparedCount = useMemo(
@@ -499,12 +737,28 @@
     const getSkillAbilityKey = (skill) =>
       SKILL_ABILITY_MAP[skill.ability] || skill.ability?.toLowerCase?.() || "dex";
 
+    const getTrainingLevel = (skillKey) => {
+      const value = sheet.skills?.[skillKey];
+      if (value === "expertise") return 2;
+      if (value === true) return 1;
+      const numeric = Number(value);
+      if (Number.isFinite(numeric)) {
+        if (numeric >= 2) return 2;
+        if (numeric >= 1) return 1;
+        return 0;
+      }
+      return value ? 1 : 0;
+    };
+
     const getSkillBonus = (skill) => {
       if (!skill) return 0;
       const abilityKey = getSkillAbilityKey(skill);
       const base = abilityMods[abilityKey] || 0;
-      const trained = !!sheet.skills?.[skill.key];
-      return base + (trained ? proficiency : 0);
+      const trainingLevel = getTrainingLevel(skill.key);
+      let total = base;
+      if (trainingLevel >= 1) total += proficiency;
+      if (trainingLevel >= 2) total += proficiency;
+      return total;
     };
 
     const formatBonus = (value) => (value >= 0 ? `+${value}` : `${value}`);
@@ -559,7 +813,17 @@
         null
       );
       return {
-        proficientCount: Object.values(sheet.skills || {}).filter(Boolean).length,
+        proficientCount: Object.values(sheet.skills || {}).filter((val) => {
+          const lvl =
+            val === true
+              ? 1
+              : Number.isFinite(Number(val))
+              ? Number(val)
+              : val
+              ? 1
+              : 0;
+          return Number(lvl) >= 1;
+        }).length,
         bestSkill: best,
         passivePerception: passiveScore("perception"),
         passiveInvestigation: passiveScore("investigation"),
@@ -569,6 +833,23 @@
 
 
     const xpCeil = xpForLevel(Math.min((sheet.level || 1) + 1, 20));
+    const unlockedFeatureCount = useMemo(() => {
+      const rows = Array.isArray(classProgressionRows)
+        ? classProgressionRows
+        : [];
+      const total = rows.reduce((sum, row) => {
+        if (!row) return sum;
+        const lvl = Number(row.level);
+        if (!Number.isFinite(lvl) || lvl > (Number(sheet.level) || 1)) {
+          return sum;
+        }
+        const count = Array.isArray(row.feature_slugs)
+          ? row.feature_slugs.filter(Boolean).length
+          : 0;
+        return sum + count;
+      }, 0);
+      return total > 0 ? total : null;
+    }, [classProgressionRows, sheet.level]);
     const spellLevelOptions = useMemo(() => {
       const levels = new Set([0]);
       (Array.isArray(sheet.spells) ? sheet.spells : []).forEach((spell) => {
@@ -1049,13 +1330,27 @@
       }));
 
     const toggleSkill = (key) =>
-      updateSheet((prev) => ({
-        ...prev,
-        skills: {
-          ...prev.skills,
-          [key]: !prev.skills?.[key],
-        },
-      }));
+      updateSheet((prev) => {
+        const currentRaw = prev.skills?.[key];
+        let current;
+        if (currentRaw === "expertise") current = 2;
+        else if (currentRaw === true) current = 1;
+        else if (Number.isFinite(Number(currentRaw))) current = Number(currentRaw);
+        else current = currentRaw ? 1 : 0;
+
+        const next = current >= 2 ? 0 : current + 1;
+        const nextSkills = { ...(prev.skills || {}) };
+        if (next <= 0) {
+          delete nextSkills[key];
+        } else {
+          nextSkills[key] = next;
+        }
+
+        return {
+          ...prev,
+          skills: nextSkills,
+        };
+      });
 
     const updateSpellSlot = (level, patch) =>
       updateSheet((prev) => {
@@ -1210,6 +1505,22 @@
       },
       { label: "Proficiency", value: `+${proficiency}` },
     ];
+    if (sheet.subclass?.title) {
+      heroChipData.push({
+        label: "Subclass",
+        value: sheet.subclass.title,
+      });
+    }
+    const hasSubclassData = availableSubclasses.length > 0;
+    const subclassDisabled =
+      !classSlug || !hasSubclassData || !levelUnlocksSubclass;
+    const subclassHint = !classSlug
+      ? "Select a class to view subclasses."
+      : !hasSubclassData
+      ? "No subclass data for this class yet."
+      : levelUnlocksSubclass
+      ? `Choose a subclass unlocked at level ${subclassUnlockLevel}.`
+      : `Reach level ${subclassUnlockLevel} to unlock subclass selection.`;
     const autosaveStatus = savedAtLabel
       ? React.createElement(
           "div",
@@ -1291,11 +1602,14 @@
                     {
                       className: "ui-select",
                       value: sheet.className || "",
-                      onChange: (e) =>
+                      onChange: (e) => {
+                        const value = e.target.value;
                         updateSheet((prev) => ({
                           ...prev,
-                          className: e.target.value,
-                        })),
+                          className: value,
+                          subclass: null,
+                        }));
+                      },
                     },
                     [
                       React.createElement(
@@ -1305,6 +1619,33 @@
                       ),
                       ...classOptions.map((opt) =>
                         React.createElement("option", { key: opt, value: opt }, opt)
+                      ),
+                    ]
+                  ),
+                }),
+                Field({
+                  label: "Subclass",
+                  hint: subclassHint,
+                  children: React.createElement(
+                    "select",
+                    {
+                      className: "ui-select",
+                      value: sheet.subclass?.slug || "",
+                      disabled: subclassDisabled,
+                      onChange: (e) => handleSubclassSelect(e.target.value),
+                    },
+                    [
+                      React.createElement(
+                        "option",
+                        { key: "blank", value: "" },
+                        subclassDisabled ? "Subclass locked" : "No subclass selected"
+                      ),
+                      ...availableSubclasses.map((opt) =>
+                        React.createElement(
+                          "option",
+                          { key: opt.subclass_slug, value: opt.subclass_slug },
+                          opt.title || toTitleCase(opt.subclass_slug)
+                        )
                       ),
                     ]
                   ),
@@ -1467,8 +1808,15 @@
         });
 
     const renderSkillRow = (skill) => {
-      const trained = !!sheet.skills?.[skill.key];
+      const trainingLevel = getTrainingLevel(skill.key);
+      const trained = trainingLevel >= 1;
+      const expertise = trainingLevel >= 2;
       const bonus = getSkillBonus(skill);
+      const trainingLabel = expertise
+        ? "Expertise"
+        : trained
+        ? "Proficient"
+        : "Tap to train";
       return React.createElement(
         "button",
         {
@@ -1485,7 +1833,11 @@
             padding: "0.5rem 0.75rem",
             borderRadius: 10,
             border: "1px solid rgba(148,163,184,0.25)",
-            background: trained ? "rgba(34,197,94,0.15)" : "transparent",
+            background: expertise
+              ? "rgba(59,130,246,0.18)"
+              : trained
+              ? "rgba(34,197,94,0.15)"
+              : "transparent",
           },
           onClick: () => toggleSkill(skill.key),
         },
@@ -1514,7 +1866,7 @@
           React.createElement(
             "div",
             { className: "ui-hint", style: { textTransform: "none" } },
-            trained ? "Proficient" : "Tap to train"
+            trainingLabel
           )
         )
       );
@@ -1522,7 +1874,7 @@
 
     const skillSearchField = Field({
       label: "Filter skills",
-      hint: "Tap a skill to toggle proficiency",
+      hint: "Tap to cycle Untrained → Proficient → Expertise",
       children: React.createElement("input", {
         className: "ui-input",
         placeholder: "Search Acrobatics, Dex, ...",
@@ -1993,6 +2345,137 @@
             )
           );
 
+    const classResourceBadges = [];
+    if (classLevelData?.class_die) {
+      classResourceBadges.push({
+        label: "Class Die",
+        value: String(classLevelData.class_die).toUpperCase(),
+      });
+    }
+    if (Number(classLevelData?.cantrips_known) > 0) {
+      classResourceBadges.push({
+        label: "Cantrips Known",
+        value: String(classLevelData.cantrips_known),
+      });
+    }
+    if (Number(classLevelData?.prepared_spells) > 0) {
+      classResourceBadges.push({
+        label: "Prepared Spells",
+        value: String(classLevelData.prepared_spells),
+      });
+    }
+    const classSpellReference =
+      classFeatures?.status === "ready" && classLevelData
+        ? React.createElement(
+            "div",
+            {
+              className: "grid gap-2",
+              style: {
+                border: "1px solid rgba(148,163,184,0.35)",
+                borderRadius: 12,
+                padding: "12px",
+                background: "rgba(15,23,42,0.35)",
+              },
+            },
+            React.createElement(
+              "div",
+              {
+                style: {
+                  display: "flex",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  gap: 8,
+                },
+              },
+              React.createElement(
+                "div",
+                { style: { fontWeight: 600 } },
+                `Level ${classLevelData.level} Class Snapshot`
+              ),
+              referenceSpellSlotTotals
+                ? React.createElement(Btn, {
+                    type: "button",
+                    className: "btn-primary",
+                    onClick: syncSpellSlotsFromClass,
+                    style: { minWidth: 0 },
+                    children: "Apply slot totals",
+                  })
+                : null
+            ),
+            classResourceBadges.length
+              ? React.createElement(
+                  "div",
+                  {
+                    style: {
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 8,
+                    },
+                  },
+                  classResourceBadges.map((badge) =>
+                    React.createElement(
+                      "span",
+                      {
+                        key: badge.label,
+                        className: "tag",
+                        style: { fontSize: "0.8rem" },
+                      },
+                      React.createElement("span", null, badge.label),
+                      React.createElement(
+                        "strong",
+                        { style: { marginLeft: 4 } },
+                        badge.value
+                      )
+                    )
+                  )
+                )
+              : null,
+            classSpellSlotEntries.length
+              ? React.createElement(
+                  "div",
+                  { className: "grid gap-1" },
+                  classSpellSlotEntries.map((entry) =>
+                    React.createElement(
+                      "div",
+                      {
+                        key: entry.key,
+                        style: {
+                          display: "flex",
+                          justifyContent: "space-between",
+                          border: "1px solid rgba(148,163,184,0.25)",
+                          borderRadius: 8,
+                          padding: "6px 10px",
+                          background: "rgba(15,23,42,0.25)",
+                        },
+                      },
+                      React.createElement(
+                        "span",
+                        { className: "ui-label", style: { textTransform: "none" } },
+                        entry.label
+                      ),
+                      React.createElement("strong", null, entry.value)
+                    )
+                  )
+                )
+              : React.createElement(
+                  "div",
+                  { className: "ui-hint" },
+                  "No spell slot data for this class level."
+                ),
+            classLevelData.notes
+              ? React.createElement(
+                  "div",
+                  {
+                    className: "ui-hint",
+                    style: { textTransform: "none" },
+                  },
+                  classLevelData.notes
+                )
+              : null
+          )
+        : null;
+
     const spellStatsBar =
       spellStats.total === 0
         ? null
@@ -2354,6 +2837,7 @@
       ? React.createElement(SpellsComponent, {
           Card,
           Btn,
+          classReferenceCard: classSpellReference,
           spellCatalogSection,
           spellStatsBar,
           totalSpells,
@@ -2372,6 +2856,30 @@
             "div",
             { className: "ui-hint" },
             "Spells view unavailable"
+          ),
+        });
+
+    const featuresTab = FeaturesComponent
+      ? React.createElement(FeaturesComponent, {
+          Card,
+          Btn,
+          classNameLabel: sheet.className,
+          classSlug,
+          sheetLevel: sheet.level,
+          featureState: classFeatures,
+          onRefresh: classFeatures?.refresh || (() => {}),
+          classLevelData,
+          subclassOptions: availableSubclasses,
+          activeSubclass: sheet.subclass,
+          subclassFeatures,
+          onSelectSubclass: handleSubclassSelect,
+          canSelectSubclass: levelUnlocksSubclass && hasSubclassData,
+        })
+      : Card({
+          children: React.createElement(
+            "div",
+            { className: "ui-hint" },
+            "Features view unavailable"
           ),
         });
 
@@ -2423,6 +2931,12 @@
         badge: sheet.spells.length
           ? `${preparedCount}/${sheet.spells.length}`
           : null,
+      },
+      {
+        id: "features",
+        label: "Features",
+        node: featuresTab,
+        badge: unlockedFeatureCount ? String(unlockedFeatureCount) : null,
       },
       {
         id: "notes",

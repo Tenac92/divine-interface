@@ -109,6 +109,7 @@
     return {
       name: username || "",
       className: "",
+      subclass: null,
       species: "",
       background: "",
       level: 1,
@@ -142,6 +143,9 @@
       fp: 10,
       owned: [],
       lock: false,
+      heroStatus: "",
+      heroGreeting: "",
+      heroMessage: "",
       sheet: defaultSheet(username),
     };
   }

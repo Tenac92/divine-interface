@@ -3,7 +3,7 @@
   const Hooks = (AppNS.SheetHooks = AppNS.SheetHooks || {});
   const React = window.React;
   if (!React) return;
-  const { useEffect, useState, useRef } = React;
+  const { useEffect, useState, useRef, useCallback } = React;
 
   Hooks.useClassCatalog = function useClassCatalog({ catalog, hasClassCatalog, initial = [] }) {
     const [options, setOptions] = useState(initial);
@@ -222,5 +222,163 @@
       sheetClassName,
     ]);
     return { results, loading };
+  };
+
+  Hooks.useClassFeatures = function useClassFeatures(params = {}) {
+    const { catalog, classSlug, subclassSlug = "", enabled = true } = params;
+    const supportsApi =
+      typeof catalog?.getClassProgression === "function" &&
+      typeof catalog?.getClassFeatures === "function";
+    const supportsSubclassList =
+      typeof catalog?.listClassSubclasses === "function";
+    const supportsSubclassFeatures =
+      typeof catalog?.getSubclassFeatures === "function";
+    const [nonce, setNonce] = useState(0);
+    const refresh = useCallback(() => {
+      setNonce((value) => value + 1);
+    }, []);
+    const [state, setState] = useState(() => {
+      if (!supportsApi) {
+        return {
+          status: "unsupported",
+          progression: [],
+          featureIndex: new Map(),
+          subclasses: [],
+          subclassFeatures: [],
+          error: null,
+        };
+      }
+      if (!enabled || !classSlug) {
+        return {
+          status: "idle",
+          progression: [],
+          featureIndex: new Map(),
+          subclasses: [],
+          subclassFeatures: [],
+          error: null,
+        };
+      }
+      return {
+        status: "loading",
+        progression: [],
+        featureIndex: new Map(),
+        subclasses: [],
+        subclassFeatures: [],
+        error: null,
+      };
+    });
+    useEffect(() => {
+      if (!supportsApi) {
+        setState({
+          status: "unsupported",
+          progression: [],
+          featureIndex: new Map(),
+          subclasses: [],
+          subclassFeatures: [],
+          error: null,
+        });
+        return;
+      }
+      if (!enabled || !classSlug) {
+        setState({
+          status: "idle",
+          progression: [],
+          featureIndex: new Map(),
+          subclasses: [],
+          subclassFeatures: [],
+          error: null,
+        });
+        return;
+      }
+      let cancelled = false;
+      setState((prev) => ({
+        ...prev,
+        status: "loading",
+        error: null,
+      }));
+      (async () => {
+        try {
+          const promises = [
+            catalog.getClassProgression({ classSlug }),
+            catalog.getClassFeatures({ classSlug }),
+          ];
+          if (supportsSubclassList) {
+            promises.push(catalog.listClassSubclasses({ classSlug }));
+          } else {
+            promises.push(Promise.resolve([]));
+          }
+          if (subclassSlug && supportsSubclassFeatures) {
+            promises.push(
+              catalog.getSubclassFeatures({ subclassSlug })
+            );
+          } else {
+            promises.push(Promise.resolve([]));
+          }
+          const [progression, features, subclasses, subclassFeatures] =
+            await Promise.all(promises);
+          if (cancelled) return;
+          const featureIndex = new Map();
+          (Array.isArray(features) ? features : []).forEach((entry) => {
+            if (entry && entry.feature_slug) {
+              featureIndex.set(entry.feature_slug, entry);
+            }
+          });
+          const normalizedProgression = Array.isArray(progression)
+            ? progression
+                .slice()
+                .sort(
+                  (a, b) =>
+                    (Number(a?.level) || 0) - (Number(b?.level) || 0)
+                )
+            : [];
+          const normalizedSubclasses = Array.isArray(subclasses)
+            ? subclasses.slice()
+            : [];
+          const normalizedSubclassFeatures = Array.isArray(subclassFeatures)
+            ? subclassFeatures
+                .slice()
+                .sort(
+                  (a, b) =>
+                    (Number(a?.level) || 0) - (Number(b?.level) || 0)
+                )
+            : [];
+          setState({
+            status: "ready",
+            progression: normalizedProgression,
+            featureIndex,
+            subclasses: normalizedSubclasses,
+            subclassFeatures: normalizedSubclassFeatures,
+            error: null,
+          });
+        } catch (err) {
+          if (cancelled) return;
+          setState({
+            status: "error",
+            progression: [],
+            featureIndex: new Map(),
+            subclasses: [],
+            subclassFeatures: [],
+            error: err || new Error("Failed to load class features"),
+          });
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [
+      supportsApi,
+      catalog,
+      classSlug,
+      subclassSlug,
+      enabled,
+      nonce,
+      supportsSubclassList,
+      supportsSubclassFeatures,
+    ]);
+    return {
+      ...state,
+      refresh: supportsApi ? refresh : () => {},
+      supportsApi,
+    };
   };
 })();

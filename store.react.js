@@ -92,6 +92,9 @@
       fp: 10,
       owned: [],
       lock: false,
+      heroStatus: "",
+      heroGreeting: "",
+      heroMessage: "",
     };
   }
 
@@ -567,6 +570,26 @@
     if (loading || !profile)
       return React.createElement(Card, null, "Calibrating astral storefront...");
 
+    const heroVariables = {
+      name: profile.name || sess.username,
+      god: profile.god || "your patron",
+      rank,
+    };
+    const formatHeroCopy = (template, fallback) => {
+      const source = (template && String(template).trim()) || fallback;
+      if (!source) return "";
+      return source.replace(/\{\{(name|god|rank)\}\}/gi, (_, token) => {
+        const key = token.toLowerCase();
+        return heroVariables[key] || "";
+      });
+    };
+    const heroStatus = formatHeroCopy(profile.heroStatus, "Transference Complete");
+    const heroGreeting = formatHeroCopy(profile.heroGreeting, "Welcome, {{name}}");
+    const heroBody = formatHeroCopy(
+      profile.heroMessage,
+      "You arrive within the Sanctum Exchange. Align with {{god}} and requisition the relics that will anchor you to this world."
+    );
+
     const hero = React.createElement(
       Card,
       {
@@ -596,17 +619,24 @@
             React.createElement(
               "div",
               { style: { fontSize: 14, opacity: 0.7, letterSpacing: 1 } },
-              "Transference Complete"
+              heroStatus
             ),
             React.createElement(
               "div",
               { style: { fontSize: 28, fontWeight: 700 } },
-              `Welcome, ${profile.name || sess.username}`
+              heroGreeting
             ),
             React.createElement(
               "div",
-              { style: { opacity: 0.75, marginTop: 6, fontSize: 14 } },
-              `You arrive within the Sanctum Exchange. Align with ${profile.god} and requisition the relics that will anchor you to this world.`
+              {
+                style: {
+                  opacity: 0.75,
+                  marginTop: 6,
+                  fontSize: 14,
+                  whiteSpace: "pre-line",
+                },
+              },
+              heroBody
             )
           ),
           React.createElement(

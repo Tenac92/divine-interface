@@ -7,6 +7,7 @@
   function SheetSpells({
     Card,
     Btn,
+    classReferenceCard,
     spellCatalogSection,
     spellStatsBar,
     totalSpells,
@@ -103,6 +104,7 @@
       children: React.createElement(
         "div",
         { className: "grid gap-3" },
+        classReferenceCard,
         spellCatalogSection,
         spellStatsBar,
         totalSpells === 0

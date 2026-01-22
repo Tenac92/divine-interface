@@ -43,6 +43,9 @@
     fp: 10,
     owned: [],
     lock: false,
+    heroStatus: "",
+    heroGreeting: "",
+    heroMessage: "",
     sheet: null,
   });
   const formatBytes = (value) => {
@@ -159,6 +162,7 @@
     const [profiles, setProfiles] = useState([]);
     const [profileFilter, setProfileFilter] = useState("");
     const [profileSaving, setProfileSaving] = useState(false);
+    const [profileModal, setProfileModal] = useState(null);
 
     const [mapsLoading, setMapsLoading] = useState(true);
     const [maps, setMaps] = useState([]);
@@ -523,8 +527,23 @@
               ? profile.owned.length
               : 0;
             const lastUpdated = profile?.sheet?.updatedAt || profile?.updatedAt;
+            const stats = [
+              { label: "Faith", value: profile?.fp ?? 0 },
+              { label: "Level", value: profile?.level ?? 1 },
+              { label: "Owned", value: ownedCount },
+              { label: "Store", value: profile?.lock ? "Locked" : "Open" },
+            ];
+            const handleReset = (event) => {
+              event.stopPropagation();
+              resetProfile(owner);
+            };
             return Card({
               key: owner,
+              style: {
+                cursor: "pointer",
+                transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+              },
+              onClick: () => openProfileModal(owner),
               children: React.createElement(
                 "div",
                 { className: "grid gap-3" },
@@ -541,7 +560,7 @@
                   },
                   React.createElement(
                     "div",
-                    { style: { fontWeight: 600 } },
+                    { style: { fontWeight: 600, fontSize: "1.05rem" } },
                     owner
                   ),
                   React.createElement(
@@ -559,16 +578,11 @@
                       gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
                     },
                   },
-                  [
-                    ["FP", profile?.fp ?? 0],
-                    ["Level", profile?.level ?? 1],
-                    ["Owned items", ownedCount],
-                    ["Store lock", profile?.lock ? "Locked" : "Open"],
-                  ].map(([label, value]) =>
+                  stats.map((stat) =>
                     React.createElement(
                       "div",
                       {
-                        key: label,
+                        key: stat.label,
                         className: "card",
                         style: {
                           padding: "0.6rem",
@@ -576,82 +590,121 @@
                           background: "rgba(8,12,20,0.5)",
                         },
                       },
-                      React.createElement("div", { className: "ui-label" }, label),
-                      React.createElement("div", { style: { fontWeight: 600 } }, value)
+                      React.createElement("div", { className: "ui-label" }, stat.label),
+                      React.createElement("div", { style: { fontWeight: 600 } }, stat.value)
                     )
                   )
                 ),
-                Field({
-                  label: "Faith points",
-                  children: React.createElement(
-                    "div",
-                    {
-                      style: {
-                        display: "flex",
-                        flexWrap: "wrap",
-                        gap: 8,
-                        alignItems: "center",
-                      },
+                React.createElement(
+                  "div",
+                  { className: "ui-hint", style: { textTransform: "none" } },
+                  lastUpdated
+                    ? `Last sheet save ${new Date(lastUpdated).toLocaleString()}`
+                    : "No sheet activity recorded yet."
+                ),
+                React.createElement(
+                  "div",
+                  {
+                    style: {
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 8,
+                      alignItems: "center",
+                      justifyContent: "flex-end",
                     },
-                    ["-5", "-1", "+1", "+5"].map((delta) =>
-                      Btn({
-                        key: delta,
-                        type: "button",
-                        onClick: () => adjustProfileFP(owner, Number(delta)),
-                        children: delta,
-                      })
-                    ),
-                    React.createElement("input", {
-                      className: "ui-input",
-                      type: "number",
-                      defaultValue: profile?.fp ?? 0,
-                      onKeyDown: (e) => {
-                        if (e.key === "Enter") setProfileFP(owner, Number(e.currentTarget.value));
+                  },
+                  [
+                    Btn({
+                      type: "button",
+                      className: "btn-primary",
+                      onClick: (event) => {
+                        event.stopPropagation();
+                        openProfileModal(owner);
                       },
-                    })
-                  ),
-                }),
-                Field({
-                  label: "Lock store access",
-                  children: Btn({
-                    type: "button",
-                    className: profile?.lock ? "tab-btn-active" : "",
-                    onClick: () => toggleLock(owner),
-                    children: profile?.lock ? "Locked" : "Unlocked",
-                  }),
-                }),
-                Field({
-                  label: "Set patron",
-                  children: React.createElement("input", {
-                    className: "ui-input",
-                    value: profile?.god || "",
-                    placeholder: "Tyr/Bahamut",
-                    onChange: (e) => patchProfile(owner, { god: e.target.value }),
-                  }),
-                }),
-                lastUpdated
-                  ? React.createElement(
-                      "div",
-                      { className: "ui-hint" },
-                      "Sheet last saved ",
-                      new Date(lastUpdated).toLocaleString()
-                    )
-                  : null,
-                Btn({
-                  type: "button",
-                  className: "btn-muted",
-                  onClick: () => resetProfile(owner),
-                  children: "Reset to defaults",
-                })
+                      children: "Manage profile",
+                    }),
+                    Btn({
+                      type: "button",
+                      className: "btn-muted",
+                      onClick: handleReset,
+                      children: "Reset to defaults",
+                    }),
+                  ]
+                )
               ),
             });
-          });
-
-    const missingProfiles = useMemo(() => {
+          });    const missingProfiles = useMemo(() => {
       const userNames = new Set(users.map((u) => u.username));
       const profileNames = new Set(profiles.map((p) => p.owner));
       return Array.from(userNames).filter((name) => !profileNames.has(name));
     }, [users, profiles]);
+
+    const openProfileModal = (owner) => {
+      const entry = profiles.find((p) => p.owner === owner);
+      if (!entry) return;
+      const profile = entry.profile || defaultProfile(owner);
+      setProfileModal({
+        owner,
+        draft: {
+          ...profile,
+          heroStatus: profile.heroStatus || "",
+          heroGreeting: profile.heroGreeting || "",
+          heroMessage: profile.heroMessage || "",
+        },
+      });
+    };
+
+    const closeProfileModal = () => {
+      setProfileModal(null);
+    };
+
+    const updateModalDraft = (patch) => {
+      setProfileModal((prev) => {
+        if (!prev) return prev;
+        return { ...prev, draft: { ...prev.draft, ...patch } };
+      });
+    };
+
+    const adjustModalFp = (delta) => {
+      setProfileModal((prev) => {
+        if (!prev) return prev;
+        const current = Number(prev.draft.fp ?? 0) || 0;
+        const next = Math.max(0, current + delta);
+        return { ...prev, draft: { ...prev.draft, fp: next } };
+      });
+    };
+
+    const setModalFpValue = (value) => {
+      setProfileModal((prev) => {
+        if (!prev) return prev;
+        if (value === "") {
+          return { ...prev, draft: { ...prev.draft, fp: "" } };
+        }
+        const numeric = Number(value);
+        if (Number.isNaN(numeric)) return prev;
+        return { ...prev, draft: { ...prev.draft, fp: Math.max(0, numeric) } };
+      });
+    };
+
+    const saveModalProfile = async () => {
+      if (!profileModal) return;
+      const { owner, draft } = profileModal;
+      const normalized = {
+        ...draft,
+        fp: Math.max(0, Number(draft.fp) || 0),
+        heroStatus: draft.heroStatus || "",
+        heroGreeting: draft.heroGreeting || "",
+        heroMessage: draft.heroMessage || "",
+      };
+      await saveProfile(owner, normalized, "Profile updated.");
+      closeProfileModal();
+    };
+
+    const resetModalProfile = async () => {
+      if (!profileModal) return;
+      await resetProfile(profileModal.owner);
+      closeProfileModal();
+    };
 
     async function updateUser(username, patch) {
       if (!username) return;
@@ -737,38 +790,11 @@
       }
     }
 
-    async function adjustProfileFP(owner, delta) {
-      const profile = profiles.find((p) => p.owner === owner)?.profile;
-      if (!profile) return;
-      await setProfileFP(owner, (profile.fp ?? 0) + delta);
-    }
-
-    async function setProfileFP(owner, fp) {
-      const profile = profiles.find((p) => p.owner === owner)?.profile;
-      if (!profile) return;
-      const next = { ...profile, fp: Math.max(0, Number(fp) || 0) };
-      await saveProfile(owner, next, "Faith points updated.");
-    }
-
-    async function toggleLock(owner) {
-      const profile = profiles.find((p) => p.owner === owner)?.profile;
-      if (!profile) return;
-      const next = { ...profile, lock: !profile.lock };
-      await saveProfile(owner, next, next.lock ? "Store locked." : "Store unlocked.");
-    }
-
     async function resetProfile(owner) {
       if (!window.confirm("Reset this profile to defaults?")) return;
       const profile = defaultProfile(owner);
       await saveProfile(owner, profile, "Profile reset.");
       refreshProfiles();
-    }
-
-    async function patchProfile(owner, patch) {
-      const profile = profiles.find((p) => p.owner === owner)?.profile;
-      if (!profile) return;
-      const next = { ...profile, ...patch };
-      await saveProfile(owner, next);
     }
 
     async function saveProfile(owner, profile, toastMessage) {
@@ -923,6 +949,249 @@
       ),
     });
 
+    const profileModalNode = !profileModal
+      ? null
+      : (() => {
+          const { owner, draft } = profileModal;
+          const stats = [
+            { label: "Faith", value: draft.fp ?? 0 },
+            { label: "Level", value: draft.level ?? 1 },
+            {
+              label: "Owned",
+              value: Array.isArray(draft.owned) ? draft.owned.length : 0,
+            },
+            { label: "Store", value: draft.lock ? "Locked" : "Open" },
+          ];
+          const lastUpdated =
+            draft.sheet?.updatedAt || draft.updatedAt || draft.lastUpdated || null;
+          return React.createElement(
+            "div",
+            {
+              style: {
+                position: "fixed",
+                inset: 0,
+                background: "rgba(2,6,23,0.7)",
+                backdropFilter: "blur(4px)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "1.5rem",
+                zIndex: 2000,
+              },
+              onClick: (event) => {
+                if (event.target === event.currentTarget) {
+                  closeProfileModal();
+                }
+              },
+            },
+            Card({
+              className: "grid gap-4",
+              style: { width: "100%", maxWidth: 640 },
+              children: React.createElement(
+                React.Fragment,
+                null,
+                React.createElement(
+                  "div",
+                  {
+                    style: {
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      flexWrap: "wrap",
+                      gap: 12,
+                    },
+                  },
+                  React.createElement(
+                    "div",
+                    { style: { fontWeight: 600, fontSize: "1.1rem" } },
+                    `Managing ${owner}`
+                  ),
+                  Btn({
+                    type: "button",
+                    className: "btn-muted",
+                    onClick: closeProfileModal,
+                    children: "Close",
+                  })
+                ),
+                React.createElement(
+                  "div",
+                  {
+                    style: {
+                      display: "grid",
+                      gap: 8,
+                      gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                    },
+                  },
+                  stats.map((stat) =>
+                    React.createElement(
+                      "div",
+                      {
+                        key: stat.label,
+                        className: "card",
+                        style: {
+                          padding: "0.65rem",
+                          border: "1px solid rgba(125,211,252,0.25)",
+                          background: "rgba(10,16,28,0.55)",
+                        },
+                      },
+                      React.createElement("div", { className: "ui-label" }, stat.label),
+                      React.createElement("div", { style: { fontWeight: 600 } }, stat.value)
+                    )
+                  )
+                ),
+                Field({
+                  label: "Faith points",
+                  hint: "Use buttons for quick adjustments or enter an exact value.",
+                  children: React.createElement(
+                    "div",
+                    {
+                      style: {
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: 8,
+                        alignItems: "center",
+                      },
+                    },
+                    ["-5", "-1", "+1", "+5"].map((delta) =>
+                      Btn({
+                        key: delta,
+                        type: "button",
+                        onClick: () => adjustModalFp(Number(delta)),
+                        children: delta,
+                      })
+                    ),
+                    React.createElement("input", {
+                      className: "ui-input",
+                      type: "number",
+                      value: draft.fp === "" ? "" : String(draft.fp ?? 0),
+                      onChange: (e) => setModalFpValue(e.target.value),
+                    })
+                  ),
+                }),
+                Field({
+                  label: "Store lock",
+                  children: Btn({
+                    type: "button",
+                    className: draft.lock ? "tab-btn-active" : "",
+                    onClick: () => updateModalDraft({ lock: !draft.lock }),
+                    children: draft.lock ? "Locked" : "Unlocked",
+                  }),
+                }),
+                Field({
+                  label: "Patron deity",
+                  hint: "Leave blank to prompt players inside the store view.",
+                  children: React.createElement("input", {
+                    className: "ui-input",
+                    value: draft.god || "",
+                    placeholder: "Tyr/Bahamut",
+                    onChange: (e) => updateModalDraft({ god: e.target.value }),
+                  }),
+                }),
+                React.createElement(
+                  "div",
+                  {
+                    className: "grid gap-2",
+                    style: {
+                      border: "1px dashed rgba(125,211,252,0.35)",
+                      borderRadius: 12,
+                      padding: "0.85rem",
+                      background: "rgba(8,12,20,0.45)",
+                    },
+                  },
+                  React.createElement(
+                    "div",
+                    { className: "ui-label" },
+                    "Hero banner copy"
+                  ),
+                  Field({
+                    label: "Status line",
+                    hint: "Supports {{name}}, {{god}}, {{rank}}.",
+                    children: React.createElement("input", {
+                      className: "ui-input",
+                      value: draft.heroStatus || "",
+                      placeholder: "Transference Complete",
+                      onChange: (e) => updateModalDraft({ heroStatus: e.target.value }),
+                    }),
+                  }),
+                  Field({
+                    label: "Greeting",
+                    hint: "Headline copy. Supports {{name}} and {{god}}.",
+                    children: React.createElement("input", {
+                      className: "ui-input",
+                      value: draft.heroGreeting || "",
+                      placeholder: "Welcome, {{name}}",
+                      onChange: (e) => updateModalDraft({ heroGreeting: e.target.value }),
+                    }),
+                  }),
+                  Field({
+                    label: "Description",
+                    hint: "Multi-line body. Supports {{name}}, {{god}}, {{rank}}.",
+                    children: React.createElement("textarea", {
+                      className: "ui-input",
+                      style: { minHeight: 90, resize: "vertical" },
+                      value: draft.heroMessage || "",
+                      placeholder:
+                        "You arrive within the Sanctum Exchange. Align with {{god}}...",
+                      onChange: (e) => updateModalDraft({ heroMessage: e.target.value }),
+                    }),
+                  })
+                ),
+                React.createElement(
+                  "div",
+                  {
+                    style: {
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 8,
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                    },
+                  },
+                  React.createElement(
+                    "div",
+                    { className: "ui-hint" },
+                    lastUpdated
+                      ? `Last sheet save ${new Date(lastUpdated).toLocaleString()}`
+                      : "No sheet activity recorded yet."
+                  ),
+                  React.createElement(
+                    "div",
+                    {
+                      style: {
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: 8,
+                        alignItems: "center",
+                      },
+                    },
+                    [
+                      Btn({
+                        type: "button",
+                        className: "btn-muted",
+                        onClick: resetModalProfile,
+                        children: "Reset profile",
+                      }),
+                      Btn({
+                        type: "button",
+                        className: "btn-muted",
+                        onClick: closeProfileModal,
+                        children: "Cancel",
+                      }),
+                      Btn({
+                        type: "button",
+                        className: "btn-primary",
+                        disabled: profileSaving,
+                        onClick: saveModalProfile,
+                        children: profileSaving ? "Saving..." : "Save changes",
+                      }),
+                    ]
+                  )
+                )
+              ),
+            })
+          );
+        })();
+
     const missingProfilesCard =
       missingProfiles.length === 0
         ? null
@@ -976,6 +1245,7 @@
           });
 
     return React.createElement(
+<<<<<<< HEAD
       "div",
       { className: "grid gap-4" },
       heroCard,
@@ -1058,39 +1328,62 @@
               value: userFilter,
               onChange: (e) => setUserFilter(e.target.value),
               placeholder: "Search username or role",
+=======
+      React.Fragment,
+      null,
+      profileModalNode,
+      React.createElement(
+        "div",
+        { className: "grid gap-4" },
+        heroCard,
+        Card({
+          className: "grid gap-3",
+          children: React.createElement(
+            React.Fragment,
+            null,
+            React.createElement("h2", { style: { fontWeight: 600 } }, "User registry"),
+            Field({
+              label: "Filter users",
+              children: React.createElement("input", {
+                className: "ui-input",
+                value: userFilter,
+                onChange: (e) => setUserFilter(e.target.value),
+                placeholder: "Search username or role",
+              }),
+>>>>>>> c1599cd (full sheet rework)
             }),
-          }),
-          newUserForm,
-          React.createElement(
-            "div",
-            { className: "grid gap-2" },
-            userCards
-          )
-        ),
-      }),
-      Card({
-        className: "grid gap-3",
-        children: React.createElement(
-          React.Fragment,
-          null,
-          React.createElement("h2", { style: { fontWeight: 600 } }, "Player profiles"),
-          Field({
-            label: "Filter profiles",
-            children: React.createElement("input", {
-              className: "ui-input",
-              value: profileFilter,
-              onChange: (e) => setProfileFilter(e.target.value),
-              placeholder: "Search by owner, patron, FP...",
+            newUserForm,
+            React.createElement(
+              "div",
+              { className: "grid gap-2" },
+              userCards
+            )
+          ),
+        }),
+        Card({
+          className: "grid gap-3",
+          children: React.createElement(
+            React.Fragment,
+            null,
+            React.createElement("h2", { style: { fontWeight: 600 } }, "Player profiles"),
+            Field({
+              label: "Filter profiles",
+              children: React.createElement("input", {
+                className: "ui-input",
+                value: profileFilter,
+                onChange: (e) => setProfileFilter(e.target.value),
+                placeholder: "Search by owner, patron, FP...",
+              }),
             }),
-          }),
-          missingProfilesCard,
-          React.createElement(
-            "div",
-            { className: "grid gap-2" },
-            profileCards
-          )
-        ),
-      })
+            missingProfilesCard,
+            React.createElement(
+              "div",
+              { className: "grid gap-2" },
+              profileCards
+            )
+          ),
+        })
+      )
     );
   }
 

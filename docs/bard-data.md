@@ -1,6 +1,6 @@
 # Bard Data Tables
 
-The Bard reference data lives in `data/di_bard_features.sql`. Running that file inside Supabase creates four reusable tables and seeds them with the full 2024 Bard progression, feature text, and college details. These tables are shaped to match the rest of the Divine Interface data model (namespaced with `di_` and using the shared `touch_updated_at()` trigger).
+The Bard (and now Fighter) reference data lives in `data/di_bard_features.sql`. Running that file inside Supabase creates the reusable tables and seeds them with the full 2024 class progression, feature text, and subclass details. These tables are shaped to match the rest of the Divine Interface data model (namespaced with `di_` and using the shared `touch_updated_at()` trigger).
 
 ## Running the migration
 
@@ -15,10 +15,9 @@ If you have not already added the helper function, create `touch_updated_at()` o
 
 ## Table overview
 
-- `di_classes` - lightweight registry of every supported class (slug, display name, optional `legacy_class_id` for cross-referencing). Add a row here whenever you introduce a new class.
-- `di_class_features` - canonical text for each Bard feature (slug, title, short summary, markdown body, feature type) plus `class_id` that references `di_classes`.
-- `di_class_progressions` - one row per Bard level with proficiency bonus, Bardic Inspiration die size, cantrips known, prepared spell count, spell slot JSON (`{"1":4,"2":3,...}`), and a `feature_slugs` array. Each row links back to `di_classes` via `class_id`.
-- `di_subclasses` - metadata for the four Bard Colleges (slug, summary paragraph, markdown detail) scoped by `class_id`.
+- `di_class_features` - canonical text for each Bard/Fighter feature (slug, title, short summary, markdown body, feature type) plus `class_id` that references `public.classes`. The script looks up the Bard/Fighter rows by name, so make sure `public.classes` already contains them (use `classes_rows.sql` once).
+- `di_class_progressions` - one row per level with proficiency bonus, inspiration die (if any), cantrips known, prepared spell count, `spell_slots` JSON, and the `feature_slugs` unlocked at that level. Each row links back to `public.classes` via `class_id`.
+- `di_subclasses` - metadata for the colleges / fighter archetypes (slug, summary paragraph, markdown detail) scoped by `class_id`.
 - `di_subclass_features` - level-gated features for each college, keyed by `subclass_slug` and `feature_slug`.
 
 All tables share `created_at` / `updated_at` columns plus the `touch_updated_at` trigger so writes stay in sync with the rest of the schema.
@@ -30,7 +29,7 @@ Fetch the Bard progression table ready for a sheet view:
 ```sql
 select level,
        proficiency_bonus,
-       bardic_die,
+       class_die,
        cantrips_known,
        prepared_spells,
        spell_slots,
@@ -67,7 +66,14 @@ order by level;
 
 ## Integration notes
 
-- The script seeds `di_classes` with the Bard row (including the legacy UUID you shared). To add new classes, insert additional rows into `di_classes` and mirror the CTE pattern used for Bard when seeding the downstream tables.
-- The `spell_slots` column is JSONB to make it easy to hydrate UI controls (e.g., `slotCounts = Object.entries(spell_slots)`).
+- The script depends on `public.classes` already having Bard and Fighter rows. Run `classes_rows.sql` (or otherwise insert the classes) first; the migration will then look up the IDs automatically.
+- The `spell_slots` column is JSONB to make it easy to hydrate UI controls. Caster classes store literal spell-slot counts (`{"1":4,"2":3,...}`), while noncasters store other per-level metrics (for example, Fighter rows use `{"second_wind":3,"weapon_mastery":4}`).
 - `feature_slugs` intentionally mirrors the `window.Catalog` patterns so the client can fetch the progression first, then hydrate each slug through `di_class_features`.
 - College data lives separately so future classes can reuse the same schema by inserting new rows without structural changes.
+
+## App integration
+
+The character sheet now exposes a **Features** tab that calls the Supabase REST endpoints for `di_class_progressions` and `di_class_features`. When a player selects Bard or Fighter, the tab highlights the features unlocked at their current level and lets them expand the full markdown description without leaving the app.
+
+- The Spells tab includes a "Class Snapshot" card that mirrors the `class_die`, prepared spell counts, and per-level slot totals from `di_class_progressions`, with a one-click sync back into the sheet's slot tracker.
+- Starting at level 3, characters can pick from the `di_subclasses` rows for their class; the Features tab and hero editor stay in sync and render the matching `di_subclass_features` entries.
